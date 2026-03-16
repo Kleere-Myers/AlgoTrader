@@ -32,12 +32,12 @@ export interface Order {
 }
 
 export type SseEventType =
-  | "PositionUpdate"
-  | "OrderFill"
-  | "TradingHalted"
-  | "TradingResumed"
-  | "DailyPnl"
-  | "RiskBreach";
+  | "POSITION_UPDATE"
+  | "ORDER_FILL"
+  | "TRADING_HALTED"
+  | "TRADING_RESUMED"
+  | "DAILY_PNL"
+  | "RISK_BREACH";
 
 export interface SseEvent {
   event_type: SseEventType;
@@ -48,9 +48,11 @@ export interface SseEvent {
 export interface AccountInfo {
   equity: number;
   buying_power: number;
-  daily_pnl: number;
-  trading_halted: boolean;
-  mode: "paper" | "live";
+  cash: number;
+  currency: string;
+  status: string;
+  mode: string;
+  trading_blocked: boolean;
 }
 
 export interface Strategy {

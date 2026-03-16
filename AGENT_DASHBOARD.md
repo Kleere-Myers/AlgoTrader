@@ -126,9 +126,11 @@ export interface SseEvent {
 export interface AccountInfo {
   equity: number;
   buying_power: number;
-  daily_pnl: number;
-  trading_halted: boolean;
-  mode: "paper" | "live";
+  cash: number;
+  currency: string;
+  status: string;
+  mode: string;
+  trading_blocked: boolean;
 }
 
 export interface Strategy {

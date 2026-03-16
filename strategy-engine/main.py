@@ -2,11 +2,15 @@
 
 import os
 from pathlib import Path
+from typing import Any
 
 import duckdb
+import pandas as pd
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
 from strategies.strategy_moving_average import MovingAverageCrossover
+from strategies.strategy_rsi import RSIMeanReversion
 
 app = FastAPI(title="AlgoTrader Strategy Engine", version="0.1.0")
 
@@ -18,6 +22,7 @@ DB_PATH = os.environ.get(
 # Strategy registry — add new strategies here
 STRATEGIES = {
     "MovingAverageCrossover": MovingAverageCrossover(),
+    "RSIMeanReversion": RSIMeanReversion(),
 }
 
 # In-memory cache of last backtest results
@@ -28,9 +33,27 @@ def _cache_key(strategy: str, symbol: str) -> str:
     return f"{strategy}:{symbol}"
 
 
-def _get_db():
-    return duckdb.connect(DB_PATH, read_only=True)
+def _get_db(read_only: bool = True):
+    return duckdb.connect(DB_PATH, read_only=read_only)
 
+
+# --- POST /signal models ---
+
+class BarData(BaseModel):
+    timestamp: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+
+
+class SignalRequest(BaseModel):
+    symbol: str
+    bars: list[BarData]
+
+
+# --- Endpoints ---
 
 @app.get("/health")
 def health():
@@ -47,6 +70,36 @@ def list_strategies():
         }
         for s in STRATEGIES.values()
     ]
+
+
+@app.post("/signal")
+def generate_signals(req: SignalRequest):
+    if not req.bars:
+        raise HTTPException(status_code=400, detail="No bars provided")
+
+    df = pd.DataFrame([b.model_dump() for b in req.bars])
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df = df.sort_values("timestamp").reset_index(drop=True)
+
+    signals = []
+    for strat in STRATEGIES.values():
+        sig = strat.generate_signal(df, req.symbol.upper())
+        signals.append(sig.to_dict())
+
+    # Write signals to DuckDB for audit trail
+    con = _get_db(read_only=False)
+    try:
+        for sig in signals:
+            con.execute(
+                "INSERT INTO signals (strategy_name, symbol, timestamp, direction, confidence, reason) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                [sig["strategy_name"], sig["symbol"], sig["timestamp"],
+                 sig["direction"], sig["confidence"], sig["reason"]],
+            )
+    finally:
+        con.close()
+
+    return {"signals": signals}
 
 
 @app.post("/backtest/{strategy}/{symbol}")

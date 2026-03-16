@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { executionApi } from "@/lib/api";
+import { executionApi, strategyApi } from "@/lib/api";
 import { useSseEvents } from "@/hooks/useSseEvents";
-import type { AccountInfo, Position } from "@/types";
+import type { AccountInfo, Position, OhlcvBar, Signal } from "@/types";
+import CandlestickChart from "@/components/CandlestickChart";
 
 export default function OverviewPage() {
+  const SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"];
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [bars, setBars] = useState<OhlcvBar[]>([]);
+  const [signals, setSignals] = useState<Signal[]>([]);
+  const [chartSymbol, setChartSymbol] = useState("SPY");
   const { events, isConnected, isTradingHalted } = useSseEvents();
 
   useEffect(() => {
@@ -27,6 +32,21 @@ export default function OverviewPage() {
     load();
     const interval = setInterval(load, 10_000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Fetch bars for selected chart symbol
+  useEffect(() => {
+    strategyApi.getBars(chartSymbol).then(setBars).catch(() => setBars([]));
+  }, [chartSymbol]);
+
+  // Fetch signals from strategies
+  useEffect(() => {
+    strategyApi.getStrategies().then((strats) => {
+      const sigs = strats
+        .map((s) => s.last_signal)
+        .filter((s): s is Signal => s !== null);
+      setSignals(sigs);
+    }).catch(() => {});
   }, []);
 
   // Refresh positions on OrderFill events
@@ -65,6 +85,25 @@ export default function OverviewPage() {
           value={isConnected ? "Connected" : "Disconnected"}
           color={isConnected ? "text-green-600" : "text-gray-400"}
         />
+      </div>
+
+      {/* Candlestick chart */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold">Price Chart</h3>
+          <select
+            value={chartSymbol}
+            onChange={(e) => setChartSymbol(e.target.value)}
+            className="text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          >
+            {SYMBOLS.map((sym) => (
+              <option key={sym} value={sym}>{sym}</option>
+            ))}
+          </select>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <CandlestickChart bars={bars} signals={signals} symbol={chartSymbol} />
+        </div>
       </div>
 
       <h3 className="text-lg font-semibold mb-3">Open Positions</h3>

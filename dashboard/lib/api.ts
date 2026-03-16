@@ -1,4 +1,4 @@
-import type { AccountInfo, Position, Order, Strategy, BacktestResult, BacktestEquityPoint } from "@/types";
+import type { AccountInfo, Position, Order, Strategy, BacktestResult, BacktestEquityPoint, OhlcvBar, RiskConfig } from "@/types";
 
 const EXECUTION_URL =
   process.env.NEXT_PUBLIC_EXECUTION_URL || "http://localhost:8080";
@@ -25,6 +25,20 @@ export const executionApi = {
     fetchJson<{ status: string }>(`${EXECUTION_URL}/trading/resume`, {
       method: "POST",
     }),
+  getRiskConfig: () => fetchJson<RiskConfig>(`${EXECUTION_URL}/risk/config`),
+  patchRiskConfig: async (patch: Partial<RiskConfig>): Promise<{ data?: RiskConfig; error?: string }> => {
+    const res = await fetch(`${EXECUTION_URL}/risk/config`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+      cache: "no-store",
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      return { error: body.error || `${res.status} ${res.statusText}` };
+    }
+    return { data: body };
+  },
   sseUrl: `${EXECUTION_URL}/stream/events`,
 };
 
@@ -44,4 +58,6 @@ export const strategyApi = {
     fetchJson<BacktestResult>(`${STRATEGY_URL}/backtest/${strategy}/${symbol}`),
   getBacktestEquity: (strategy: string, symbol: string) =>
     fetchJson<BacktestEquityPoint[]>(`${STRATEGY_URL}/backtest/${strategy}/${symbol}/equity`),
+  getBars: (symbol: string) =>
+    fetchJson<OhlcvBar[]>(`${STRATEGY_URL}/bars/${symbol}`),
 };

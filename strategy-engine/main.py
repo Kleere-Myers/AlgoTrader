@@ -176,3 +176,43 @@ def get_backtest(strategy: str, symbol: str):
     if key not in _backtest_cache:
         raise HTTPException(status_code=404, detail="No backtest result cached — run POST first")
     return _backtest_cache[key]
+
+
+@app.get("/strategies/{strategy_id}/performance")
+def get_strategy_performance(strategy_id: str):
+    if strategy_id not in STRATEGIES:
+        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_id}' not found")
+
+    con = _get_db()
+    try:
+        row = con.execute(
+            "SELECT "
+            "  count(*) AS total_signals, "
+            "  count(*) FILTER (WHERE direction = 'BUY') AS buy_signals, "
+            "  count(*) FILTER (WHERE direction = 'SELL') AS sell_signals, "
+            "  count(*) FILTER (WHERE direction = 'HOLD') AS hold_signals, "
+            "  coalesce(avg(confidence), 0) AS avg_confidence "
+            "FROM signals "
+            "WHERE strategy_name = ? AND timestamp >= current_date - INTERVAL '30 days'",
+            [strategy_id],
+        ).fetchone()
+
+        by_symbol_rows = con.execute(
+            "SELECT symbol, count(*) AS cnt "
+            "FROM signals "
+            "WHERE strategy_name = ? AND timestamp >= current_date - INTERVAL '30 days' "
+            "GROUP BY symbol ORDER BY symbol",
+            [strategy_id],
+        ).fetchall()
+    finally:
+        con.close()
+
+    return {
+        "strategy_name": strategy_id,
+        "total_signals": int(row[0]),
+        "buy_signals": int(row[1]),
+        "sell_signals": int(row[2]),
+        "hold_signals": int(row[3]),
+        "avg_confidence": round(float(row[4]), 4),
+        "signals_by_symbol": {sym: int(cnt) for sym, cnt in by_symbol_rows},
+    }

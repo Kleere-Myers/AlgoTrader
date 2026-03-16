@@ -150,6 +150,7 @@ async fn main() {
         .route("/orders", get(get_orders))
         .route("/trading/halt", post(halt_trading))
         .route("/trading/resume", post(resume_trading))
+        .route("/risk/config", get(get_risk_config).patch(patch_risk_config))
         .route("/stream/events", get(stream_events))
         .layer(cors)
         .with_state(state);
@@ -574,9 +575,340 @@ async fn resume_trading(State(state): State<Arc<AppState>>) -> Json<serde_json::
     Json(serde_json::json!({"status": "active"}))
 }
 
+async fn get_risk_config(
+    State(state): State<Arc<AppState>>,
+) -> Json<RiskConfigResponse> {
+    let engine = state.risk_engine.lock().await;
+    Json(RiskConfigResponse {
+        max_daily_loss_pct: engine.config.max_daily_loss_pct,
+        max_position_size_pct: engine.config.max_position_size_pct,
+        max_open_positions: engine.config.max_open_positions,
+        min_signal_confidence: engine.config.min_signal_confidence,
+        order_throttle_secs: engine.config.order_throttle_secs,
+        eod_flatten_time_et: "15:45".to_string(),
+    })
+}
+
+async fn patch_risk_config(
+    State(state): State<Arc<AppState>>,
+    Json(update): Json<RiskConfigUpdate>,
+) -> Result<Json<RiskConfigResponse>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+    // Reject attempts to change eod_flatten_time_et
+    if update.eod_flatten_time_et.is_some() {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "eod_flatten_time_et is not editable via API in v1"
+            })),
+        ));
+    }
+
+    // Validate pct fields: must be >= 0.0 and <= 1.0
+    for (name, val) in [
+        ("max_daily_loss_pct", update.max_daily_loss_pct),
+        ("max_position_size_pct", update.max_position_size_pct),
+        ("min_signal_confidence", update.min_signal_confidence),
+    ] {
+        if let Some(v) = val {
+            if v < 0.0 || v > 1.0 {
+                return Err((
+                    axum::http::StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({
+                        "error": format!("{name} must be between 0.0 and 1.0, got {v}")
+                    })),
+                ));
+            }
+        }
+    }
+
+    // Validate max_open_positions: must be 1..=10
+    if let Some(v) = update.max_open_positions {
+        if v == 0 || v > 10 {
+            return Err((
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": format!("max_open_positions must be between 1 and 10, got {v}")
+                })),
+            ));
+        }
+    }
+
+    // Apply updates
+    let response = {
+        let mut engine = state.risk_engine.lock().await;
+        if let Some(v) = update.max_daily_loss_pct {
+            engine.config.max_daily_loss_pct = v;
+        }
+        if let Some(v) = update.max_position_size_pct {
+            engine.config.max_position_size_pct = v;
+        }
+        if let Some(v) = update.max_open_positions {
+            engine.config.max_open_positions = v;
+        }
+        if let Some(v) = update.min_signal_confidence {
+            engine.config.min_signal_confidence = v;
+        }
+        if let Some(v) = update.order_throttle_secs {
+            engine.config.order_throttle_secs = v;
+        }
+
+        RiskConfigResponse {
+            max_daily_loss_pct: engine.config.max_daily_loss_pct,
+            max_position_size_pct: engine.config.max_position_size_pct,
+            max_open_positions: engine.config.max_open_positions,
+            min_signal_confidence: engine.config.min_signal_confidence,
+            order_throttle_secs: engine.config.order_throttle_secs,
+            eod_flatten_time_et: "15:45".to_string(),
+        }
+    };
+
+    info!(
+        max_daily_loss_pct = response.max_daily_loss_pct,
+        max_position_size_pct = response.max_position_size_pct,
+        max_open_positions = response.max_open_positions,
+        min_signal_confidence = response.min_signal_confidence,
+        order_throttle_secs = response.order_throttle_secs,
+        "Risk config updated"
+    );
+
+    // Broadcast SSE event with full new config
+    state.broadcaster.send(SseEvent {
+        event_type: SseEventType::RiskConfigUpdated,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        payload: serde_json::json!({
+            "max_daily_loss_pct": response.max_daily_loss_pct,
+            "max_position_size_pct": response.max_position_size_pct,
+            "max_open_positions": response.max_open_positions,
+            "min_signal_confidence": response.min_signal_confidence,
+            "order_throttle_secs": response.order_throttle_secs,
+            "eod_flatten_time_et": "15:45",
+        }),
+    });
+
+    Ok(Json(response))
+}
+
 async fn stream_events(
     State(state): State<Arc<AppState>>,
 ) -> axum::response::sse::Sse<impl futures::stream::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>>
 {
     state.broadcaster.subscribe()
+}
+
+#[cfg(test)]
+mod risk_config_tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    fn test_state() -> Arc<AppState> {
+        let config = alpaca::AlpacaConfig {
+            api_key: "test".into(),
+            secret_key: "test".into(),
+            mode: alpaca::AlpacaMode::Paper,
+        };
+        Arc::new(AppState {
+            alpaca: AlpacaClient::new(config),
+            broadcaster: SseBroadcaster::new(100),
+            positions: Mutex::new(PositionTracker::new()),
+            risk_engine: Mutex::new(RiskEngine::new(RiskConfig::default())),
+            trading_halted: Mutex::new(false),
+            daily_pnl: Mutex::new(0.0),
+            account_equity: Mutex::new(100_000.0),
+            strategy_engine_url: "http://localhost:8000".into(),
+        })
+    }
+
+    fn test_app(state: Arc<AppState>) -> Router {
+        Router::new()
+            .route("/risk/config", get(get_risk_config).patch(patch_risk_config))
+            .with_state(state)
+    }
+
+    #[tokio::test]
+    async fn test_get_risk_config_returns_defaults() {
+        let app = test_app(test_state());
+        let resp = app
+            .oneshot(Request::get("/risk/config").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: serde_json::Value =
+            serde_json::from_slice(&axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap()).unwrap();
+
+        assert_eq!(body["max_daily_loss_pct"], 0.02);
+        assert_eq!(body["max_position_size_pct"], 0.10);
+        assert_eq!(body["max_open_positions"], 4);
+        assert_eq!(body["min_signal_confidence"], 0.60);
+        assert_eq!(body["order_throttle_secs"], 300);
+        assert_eq!(body["eod_flatten_time_et"], "15:45");
+    }
+
+    #[tokio::test]
+    async fn test_patch_risk_config_happy_path() {
+        let state = test_state();
+        let app = test_app(state.clone());
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/risk/config")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"max_daily_loss_pct": 0.03, "max_open_positions": 6}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: serde_json::Value =
+            serde_json::from_slice(&axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap()).unwrap();
+
+        assert_eq!(body["max_daily_loss_pct"], 0.03);
+        assert_eq!(body["max_open_positions"], 6);
+        // Unchanged fields remain at defaults
+        assert_eq!(body["max_position_size_pct"], 0.10);
+        assert_eq!(body["min_signal_confidence"], 0.60);
+        assert_eq!(body["order_throttle_secs"], 300);
+
+        // Verify state was actually mutated
+        let engine = state.risk_engine.lock().await;
+        assert_eq!(engine.config.max_daily_loss_pct, 0.03);
+        assert_eq!(engine.config.max_open_positions, 6);
+    }
+
+    #[tokio::test]
+    async fn test_patch_risk_config_rejects_eod_flatten_time() {
+        let app = test_app(test_state());
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/risk/config")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"eod_flatten_time_et": "15:30"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let body: serde_json::Value =
+            serde_json::from_slice(&axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert!(body["error"].as_str().unwrap().contains("not editable"));
+    }
+
+    #[tokio::test]
+    async fn test_patch_risk_config_rejects_negative_pct() {
+        let app = test_app(test_state());
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/risk/config")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"max_daily_loss_pct": -0.01}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let body: serde_json::Value =
+            serde_json::from_slice(&axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert!(body["error"].as_str().unwrap().contains("max_daily_loss_pct"));
+    }
+
+    #[tokio::test]
+    async fn test_patch_risk_config_rejects_pct_above_one() {
+        let app = test_app(test_state());
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/risk/config")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"min_signal_confidence": 1.5}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let body: serde_json::Value =
+            serde_json::from_slice(&axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert!(body["error"].as_str().unwrap().contains("min_signal_confidence"));
+    }
+
+    #[tokio::test]
+    async fn test_patch_risk_config_rejects_max_positions_above_10() {
+        let app = test_app(test_state());
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/risk/config")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"max_open_positions": 11}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let body: serde_json::Value =
+            serde_json::from_slice(&axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert!(body["error"].as_str().unwrap().contains("max_open_positions"));
+    }
+
+    #[tokio::test]
+    async fn test_patch_risk_config_rejects_zero_positions() {
+        let app = test_app(test_state());
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/risk/config")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"max_open_positions": 0}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_patch_risk_config_empty_body_is_noop() {
+        let state = test_state();
+        let app = test_app(state.clone());
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/risk/config")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        // All values should remain at defaults
+        let body: serde_json::Value =
+            serde_json::from_slice(&axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap()).unwrap();
+        assert_eq!(body["max_daily_loss_pct"], 0.02);
+        assert_eq!(body["max_open_positions"], 4);
+    }
 }

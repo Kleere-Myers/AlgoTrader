@@ -37,7 +37,8 @@ export type SseEventType =
   | "TRADING_HALTED"
   | "TRADING_RESUMED"
   | "DAILY_PNL"
-  | "RISK_BREACH";
+  | "RISK_BREACH"
+  | "RISK_CONFIG_UPDATED";
 
 export interface SseEvent {
   event_type: SseEventType;
@@ -81,4 +82,22 @@ export interface BacktestResult {
 export interface BacktestEquityPoint {
   timestamp: string;
   equity: number;
+}
+
+export interface RiskConfig {
+  max_daily_loss_pct: number;
+  max_position_size_pct: number;
+  max_open_positions: number;
+  min_signal_confidence: number;
+  order_throttle_secs: number;
+  eod_flatten_time_et: string;
+}
+
+export interface OhlcvBar {
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
 }

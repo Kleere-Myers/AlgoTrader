@@ -106,6 +106,30 @@ pub enum SseEventType {
     TradingResumed,
     DailyPnl,
     RiskBreach,
+    RiskConfigUpdated,
+}
+
+/// Partial update request for PATCH /risk/config.
+/// All fields are optional — only provided fields are updated.
+#[derive(Debug, Clone, Deserialize)]
+pub struct RiskConfigUpdate {
+    pub max_daily_loss_pct: Option<f64>,
+    pub max_position_size_pct: Option<f64>,
+    pub max_open_positions: Option<usize>,
+    pub min_signal_confidence: Option<f64>,
+    pub order_throttle_secs: Option<u64>,
+    pub eod_flatten_time_et: Option<String>,
+}
+
+/// Response for GET /risk/config and PATCH /risk/config.
+#[derive(Debug, Clone, Serialize)]
+pub struct RiskConfigResponse {
+    pub max_daily_loss_pct: f64,
+    pub max_position_size_pct: f64,
+    pub max_open_positions: usize,
+    pub min_signal_confidence: f64,
+    pub order_throttle_secs: u64,
+    pub eod_flatten_time_et: String,
 }
 
 /// SSE event envelope.

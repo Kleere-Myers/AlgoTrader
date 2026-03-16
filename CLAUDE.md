@@ -16,11 +16,11 @@ Phases 1 and 2 must be built with a single Claude Code session to establish
 and validate the shared contracts before splitting responsibilities.
 
 The shared contracts are not stable until ALL of the following are true:
-- [ ] BaseStrategy interface is implemented and tested
-- [ ] Signal struct is in use end-to-end (Python → Rust)
-- [ ] DuckDB schema is initialized and both services are reading/writing it
-- [ ] SSE event format is confirmed working in the dashboard
-- [ ] At least one strategy is paper trading successfully end-to-end
+- [x] BaseStrategy interface is implemented and tested
+- [x] Signal struct is in use end-to-end (Python → Rust)
+- [x] DuckDB schema is initialized and both services are reading/writing it
+- [x] SSE event format is confirmed working in the dashboard
+- [x] At least one strategy is paper trading successfully end-to-end
 
 When all boxes above are checked, update CURRENT PHASE to Phase 3 and agents
 may be split. Until then, use a single session and work across all three
@@ -123,7 +123,7 @@ All positions auto-closed by 3:45 PM ET
 
 ## Current Build Phase
 Update this line as you progress:
-**CURRENT PHASE: Phase 1 — Foundation**
+**CURRENT PHASE: Phase 3 — Full Strategy Suite**
 
 ## Agent Context Files
 - `AGENT_STRATEGY.md` — Python strategy engine agent prompt

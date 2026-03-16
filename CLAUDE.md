@@ -123,7 +123,13 @@ All positions auto-closed by 3:45 PM ET
 
 ## Current Build Phase
 Update this line as you progress:
-**CURRENT PHASE: Phase 4 — Dashboard Polish & Risk**
+**CURRENT PHASE: Phase 5 — Live Trading Transition**
+
+## Test Baseline (Phase 4 sign-off)
+- Rust:   26/26
+- Python: 72/72
+- Next.js: 7/7 routes
+- Total:  105 tests
 
 ## Agent Context Files
 - `AGENT_STRATEGY.md` — Python strategy engine agent prompt

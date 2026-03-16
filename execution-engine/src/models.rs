@@ -27,3 +27,128 @@ pub struct AccountSummary {
     pub mode: String,
     pub trading_blocked: bool,
 }
+
+/// Signal received from the strategy engine via POST /signal.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Signal {
+    pub symbol: String,
+    pub direction: Direction,
+    pub confidence: f64,
+    pub reason: String,
+    pub strategy_name: String,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum Direction {
+    Buy,
+    Sell,
+    Hold,
+}
+
+/// OHLCV bar from Alpaca WebSocket or strategy engine.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Bar {
+    pub symbol: String,
+    pub timestamp: String,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: i64,
+}
+
+/// Position tracked in memory and DuckDB.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Position {
+    pub symbol: String,
+    pub qty: f64,
+    pub avg_entry_price: f64,
+    pub current_price: f64,
+    pub unrealized_pnl: f64,
+}
+
+/// Order record for DuckDB.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Order {
+    pub order_id: String,
+    pub alpaca_id: Option<String>,
+    pub symbol: String,
+    pub side: String,
+    pub qty: f64,
+    pub filled_price: Option<f64>,
+    pub status: String,
+    pub strategy_name: String,
+    pub created_at: String,
+    pub filled_at: Option<String>,
+}
+
+/// Alpaca order response from POST /v2/orders.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlpacaOrder {
+    pub id: String,
+    pub status: String,
+    pub filled_avg_price: Option<String>,
+    pub filled_at: Option<String>,
+    pub symbol: String,
+    pub side: String,
+    pub qty: String,
+}
+
+/// SSE event types broadcast to the dashboard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SseEventType {
+    PositionUpdate,
+    OrderFill,
+    TradingHalted,
+    TradingResumed,
+    DailyPnl,
+    RiskBreach,
+    RiskConfigUpdated,
+}
+
+/// Partial update request for PATCH /risk/config.
+/// All fields are optional — only provided fields are updated.
+#[derive(Debug, Clone, Deserialize)]
+pub struct RiskConfigUpdate {
+    pub max_daily_loss_pct: Option<f64>,
+    pub max_position_size_pct: Option<f64>,
+    pub max_open_positions: Option<usize>,
+    pub min_signal_confidence: Option<f64>,
+    pub order_throttle_secs: Option<u64>,
+    pub eod_flatten_time_et: Option<String>,
+}
+
+/// Response for GET /risk/config and PATCH /risk/config.
+#[derive(Debug, Clone, Serialize)]
+pub struct RiskConfigResponse {
+    pub max_daily_loss_pct: f64,
+    pub max_position_size_pct: f64,
+    pub max_open_positions: usize,
+    pub min_signal_confidence: f64,
+    pub order_throttle_secs: u64,
+    pub eod_flatten_time_et: String,
+}
+
+/// SSE event envelope.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SseEvent {
+    pub event_type: SseEventType,
+    pub timestamp: String,
+    pub payload: serde_json::Value,
+}
+
+/// Response from strategy engine POST /signal.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SignalResponse {
+    pub signals: Vec<Signal>,
+}
+
+/// Request body sent to strategy engine POST /signal.
+#[derive(Debug, Clone, Serialize)]
+pub struct SignalRequest {
+    pub symbol: String,
+    pub bars: Vec<Bar>,
+}

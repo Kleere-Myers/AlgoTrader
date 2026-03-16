@@ -71,7 +71,7 @@ impl AlpacaConfig {
 #[derive(Debug, Clone)]
 pub struct AlpacaClient {
     pub config: AlpacaConfig,
-    http: Client,
+    pub(crate) http: Client,
 }
 
 impl AlpacaClient {

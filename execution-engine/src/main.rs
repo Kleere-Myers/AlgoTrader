@@ -14,6 +14,7 @@ use axum::{
     Json, Router,
 };
 use tokio::sync::Mutex;
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info, warn};
 
 use alpaca::{AlpacaClient, AlpacaConfig};
@@ -130,6 +131,11 @@ async fn main() {
     });
 
     // 8. Build Axum router
+    let cors = CorsLayer::new()
+        .allow_origin("http://localhost:3000".parse::<axum::http::HeaderValue>().unwrap())
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let app = Router::new()
         .route("/health", get(health))
         .route("/account", get(get_account))
@@ -138,6 +144,7 @@ async fn main() {
         .route("/trading/halt", post(halt_trading))
         .route("/trading/resume", post(resume_trading))
         .route("/stream/events", get(stream_events))
+        .layer(cors)
         .with_state(state);
 
     // 9. Start server

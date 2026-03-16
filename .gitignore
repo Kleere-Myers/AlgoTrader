@@ -1,0 +1,22 @@
+# Environment
+.env
+
+# Database
+data/
+
+# ML artifacts
+models/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Rust
+target/
+
+# Node
+node_modules/
+.next/

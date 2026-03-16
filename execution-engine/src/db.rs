@@ -2,10 +2,16 @@ use duckdb::{params, Connection};
 
 use crate::models::{Bar, Order, Position};
 
-/// Open a DuckDB connection. Path comes from DUCKDB_PATH env var.
+/// Open a DuckDB connection for read-write. Path comes from DUCKDB_PATH env var.
 pub fn connect() -> Result<Connection, duckdb::Error> {
     let path = std::env::var("DUCKDB_PATH").unwrap_or_else(|_| "../data/algotrader.duckdb".into());
     Connection::open(&path)
+}
+
+/// Open a DuckDB connection for read-only access.
+pub fn connect_readonly() -> Result<Connection, duckdb::Error> {
+    let path = std::env::var("DUCKDB_PATH").unwrap_or_else(|_| "../data/algotrader.duckdb".into());
+    Connection::open_with_flags(&path, duckdb::Config::default().access_mode(duckdb::AccessMode::ReadOnly)?)
 }
 
 /// Upsert an OHLCV bar into the ohlcv_bars table.
@@ -93,20 +99,25 @@ pub fn load_positions(con: &Connection) -> Result<Vec<Position>, duckdb::Error> 
 
 /// Load recent orders from DuckDB.
 pub fn load_orders(con: &Connection, limit: usize) -> Result<Vec<Order>, duckdb::Error> {
-    let mut stmt = con.prepare(
-        "SELECT order_id, alpaca_id, symbol, side, qty, filled_price, status, strategy_name, created_at, filled_at \
-         FROM orders ORDER BY created_at DESC LIMIT ?",
-    )?;
-    let rows = stmt.query_map(params![limit as i64], |row| {
+    let sql = format!(
+        "SELECT order_id, COALESCE(alpaca_id, ''), symbol, side, qty, filled_price, status, \
+         COALESCE(strategy_name, ''), CAST(created_at AS VARCHAR), CAST(filled_at AS VARCHAR) \
+         FROM orders ORDER BY created_at DESC LIMIT {}",
+        limit
+    );
+    let mut stmt = con.prepare(&sql)?;
+    let rows = stmt.query_map([], |row| {
+        let alpaca_id: String = row.get(1)?;
+        let strategy_name: String = row.get(7)?;
         Ok(Order {
             order_id: row.get(0)?,
-            alpaca_id: row.get(1)?,
+            alpaca_id: if alpaca_id.is_empty() { None } else { Some(alpaca_id) },
             symbol: row.get(2)?,
             side: row.get(3)?,
             qty: row.get(4)?,
             filled_price: row.get(5)?,
             status: row.get(6)?,
-            strategy_name: row.get(7)?,
+            strategy_name: if strategy_name.is_empty() { String::new() } else { strategy_name },
             created_at: row.get(8)?,
             filled_at: row.get(9)?,
         })

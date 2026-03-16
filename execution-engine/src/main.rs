@@ -543,16 +543,13 @@ async fn get_positions(State(state): State<Arc<AppState>>) -> Json<Vec<Position>
 }
 
 async fn get_orders(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<Order>>, (axum::http::StatusCode, String)> {
-    let _ = state; // orders come from DuckDB
-    let con = db::connect().map_err(|e| {
-        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-    })?;
-    let orders = db::load_orders(&con, 100).map_err(|e| {
-        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-    })?;
-    Ok(Json(orders))
+    State(_state): State<Arc<AppState>>,
+) -> Json<Vec<Order>> {
+    let orders = match db::connect_readonly() {
+        Ok(con) => db::load_orders(&con, 100).unwrap_or_default(),
+        Err(_) => Vec::new(),
+    };
+    Json(orders)
 }
 
 async fn halt_trading(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {

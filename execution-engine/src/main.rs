@@ -4,6 +4,7 @@ mod models;
 mod orders;
 mod positions;
 mod risk;
+mod scheduler;
 mod sse;
 
 use std::sync::Arc;
@@ -130,7 +131,13 @@ async fn main() {
         websocket_loop(ws_state).await;
     });
 
-    // 8. Build Axum router
+    // 8. Spawn EOD flatten scheduler
+    let sched_state = state.clone();
+    tokio::spawn(async move {
+        scheduler::eod_flatten_loop(sched_state).await;
+    });
+
+    // 9. Build Axum router
     let cors = CorsLayer::new()
         .allow_origin("http://localhost:3000".parse::<axum::http::HeaderValue>().unwrap())
         .allow_methods(Any)
@@ -147,7 +154,7 @@ async fn main() {
         .layer(cors)
         .with_state(state);
 
-    // 9. Start server
+    // 10. Start server
     let addr = "0.0.0.0:8080";
     info!("execution-engine listening on {addr}");
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -436,7 +443,7 @@ async fn process_bar(state: &Arc<AppState>, bar: &Bar) {
 }
 
 /// Poll Alpaca for order fill, update DuckDB, broadcast SSE event.
-async fn poll_for_fill(
+pub(crate) async fn poll_for_fill(
     state: &Arc<AppState>,
     alpaca_id: &str,
     order_id: &str,

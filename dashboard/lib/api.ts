@@ -1,4 +1,4 @@
-import type { AccountInfo, Position, Order, Strategy, BacktestResult } from "@/types";
+import type { AccountInfo, Position, Order, Strategy, BacktestResult, BacktestEquityPoint } from "@/types";
 
 const EXECUTION_URL =
   process.env.NEXT_PUBLIC_EXECUTION_URL || "http://localhost:8080";
@@ -30,10 +30,18 @@ export const executionApi = {
 
 export const strategyApi = {
   getStrategies: () => fetchJson<Strategy[]>(`${STRATEGY_URL}/strategies`),
+  updateStrategy: (id: string, patch: Partial<Strategy>) =>
+    fetchJson<Strategy>(`${STRATEGY_URL}/strategies/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }),
   triggerBacktest: (strategy: string, symbol: string) =>
     fetchJson<BacktestResult>(`${STRATEGY_URL}/backtest/${strategy}/${symbol}`, {
       method: "POST",
     }),
   getBacktestResult: (strategy: string, symbol: string) =>
     fetchJson<BacktestResult>(`${STRATEGY_URL}/backtest/${strategy}/${symbol}`),
+  getBacktestEquity: (strategy: string, symbol: string) =>
+    fetchJson<BacktestEquityPoint[]>(`${STRATEGY_URL}/backtest/${strategy}/${symbol}/equity`),
 };

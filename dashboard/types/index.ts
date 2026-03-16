@@ -77,3 +77,8 @@ export interface BacktestResult {
   period_start: string;
   period_end: string;
 }
+
+export interface BacktestEquityPoint {
+  timestamp: string;
+  equity: number;
+}

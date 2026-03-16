@@ -1,36 +1,202 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import type { BacktestResult, Strategy } from "@/types";
+import type { BacktestEquityPoint } from "@/types";
+import { strategyApi } from "@/lib/api";
+import EquityCurveChart from "@/components/EquityCurveChart";
+
+const SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"];
+
 export default function BacktestPage() {
+  const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [results, setResults] = useState<BacktestResult[]>([]);
+  const [equityData, setEquityData] = useState<Record<string, BacktestEquityPoint[]>>({});
+  const [selectedStrategy, setSelectedStrategy] = useState<string>("all");
+  const [selectedSymbol, setSelectedSymbol] = useState<string>("all");
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const strats = await strategyApi.getStrategies();
+      setStrategies(strats);
+
+      const allResults: BacktestResult[] = [];
+      const allEquity: Record<string, BacktestEquityPoint[]> = {};
+
+      const promises = strats.flatMap((s) =>
+        SYMBOLS.map(async (sym) => {
+          try {
+            const result = await strategyApi.getBacktestResult(s.name, sym);
+            allResults.push(result);
+            try {
+              const equity = await strategyApi.getBacktestEquity(s.name, sym);
+              allEquity[`${s.name}:${sym}`] = equity;
+            } catch {
+              // equity endpoint may not exist for all combos
+            }
+          } catch {
+            // no result for this combo — skip
+          }
+        })
+      );
+
+      await Promise.all(promises);
+      setResults(allResults);
+      setEquityData(allEquity);
+    } catch (e) {
+      console.error("Failed to fetch backtest data:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const strategyNames = [...new Set(results.map((r) => r.strategy_name))];
+
+  const filtered = results.filter((r) => {
+    if (selectedStrategy !== "all" && r.strategy_name !== selectedStrategy) return false;
+    if (selectedSymbol !== "all" && r.symbol !== selectedSymbol) return false;
+    return true;
+  });
+
+  const filteredEquityKeys = Object.keys(equityData).filter((key) => {
+    const [strat, sym] = key.split(":");
+    if (selectedStrategy !== "all" && strat !== selectedStrategy) return false;
+    if (selectedSymbol !== "all" && sym !== selectedSymbol) return false;
+    return true;
+  });
+
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">Backtest Results</h2>
-      <p className="text-gray-500 mb-6">
-        Equity curves, metrics, and performance comparison per strategy and symbol.
-      </p>
-      <div className="rounded border border-dashed border-gray-300 p-12 text-center text-gray-400">
-        Backtest equity curve chart will render here
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-2xl font-bold">Backtest Results</h2>
+          <p className="text-gray-500 text-sm mt-1">
+            Equity curves, metrics, and performance comparison per strategy and symbol.
+          </p>
+        </div>
+        <button
+          onClick={fetchData}
+          disabled={loading}
+          className="text-xs px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50 text-gray-600 disabled:opacity-50"
+        >
+          {loading ? "Loading..." : "Refresh"}
+        </button>
       </div>
-      <div className="mt-6 overflow-x-auto">
+
+      {/* Filters */}
+      <div className="flex gap-3 mb-6">
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Strategy</label>
+          <select
+            value={selectedStrategy}
+            onChange={(e) => setSelectedStrategy(e.target.value)}
+            className="text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          >
+            <option value="all">All Strategies</option>
+            {strategyNames.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Symbol</label>
+          <select
+            value={selectedSymbol}
+            onChange={(e) => setSelectedSymbol(e.target.value)}
+            className="text-sm border border-gray-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          >
+            <option value="all">All Symbols</option>
+            {SYMBOLS.map((sym) => (
+              <option key={sym} value={sym}>{sym}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Equity curves */}
+      {filteredEquityKeys.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+          {filteredEquityKeys.map((key) => (
+            <div key={key} className="bg-white rounded-lg border border-gray-200 p-4">
+              <EquityCurveChart
+                data={equityData[key]}
+                label={key.replace(":", " — ")}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Metrics table */}
+      <div className="overflow-x-auto">
         <table className="w-full text-sm text-left border border-gray-200 bg-white rounded-lg">
           <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
             <tr>
               <th className="px-4 py-3">Strategy</th>
               <th className="px-4 py-3">Symbol</th>
-              <th className="px-4 py-3">Return %</th>
-              <th className="px-4 py-3">Sharpe</th>
-              <th className="px-4 py-3">Max DD %</th>
-              <th className="px-4 py-3">Win Rate</th>
-              <th className="px-4 py-3">Trades</th>
-              <th className="px-4 py-3">Profit Factor</th>
+              <th className="px-4 py-3 text-right">Return %</th>
+              <th className="px-4 py-3 text-right">Sharpe</th>
+              <th className="px-4 py-3 text-right">Max DD %</th>
+              <th className="px-4 py-3 text-right">Win Rate</th>
+              <th className="px-4 py-3 text-right">Trades</th>
+              <th className="px-4 py-3 text-right">Avg Duration</th>
+              <th className="px-4 py-3 text-right">Profit Factor</th>
             </tr>
           </thead>
-          <tbody>
-            <tr>
-              <td className="px-4 py-8 text-center text-gray-400" colSpan={8}>
-                No backtest results yet — run a backtest from the Strategies page
-              </td>
-            </tr>
+          <tbody className="divide-y divide-gray-100">
+            {loading ? (
+              <tr>
+                <td className="px-4 py-8 text-center text-gray-400" colSpan={9}>
+                  Loading backtest results...
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td className="px-4 py-8 text-center text-gray-400" colSpan={9}>
+                  No backtest results yet — run a backtest from the Strategies page
+                </td>
+              </tr>
+            ) : (
+              filtered.map((r) => (
+                <tr key={`${r.strategy_name}-${r.symbol}`} className="hover:bg-gray-50">
+                  <td className="px-4 py-2.5 font-medium">{r.strategy_name}</td>
+                  <td className="px-4 py-2.5">{r.symbol}</td>
+                  <td className={`px-4 py-2.5 text-right ${r.total_return_pct >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    {r.total_return_pct >= 0 ? "+" : ""}{r.total_return_pct.toFixed(2)}%
+                  </td>
+                  <td className={`px-4 py-2.5 text-right ${r.sharpe_ratio >= 1 ? "text-green-600" : r.sharpe_ratio >= 0 ? "text-gray-700" : "text-red-600"}`}>
+                    {r.sharpe_ratio.toFixed(2)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-red-600">
+                    {r.max_drawdown_pct.toFixed(2)}%
+                  </td>
+                  <td className={`px-4 py-2.5 text-right ${r.win_rate > 0.55 ? "text-green-600" : r.win_rate >= 0.45 ? "text-yellow-600" : "text-red-600"}`}>
+                    {(r.win_rate * 100).toFixed(1)}%
+                  </td>
+                  <td className="px-4 py-2.5 text-right">{r.total_trades}</td>
+                  <td className="px-4 py-2.5 text-right">{formatDuration(r.avg_trade_duration_mins)}</td>
+                  <td className={`px-4 py-2.5 text-right ${r.profit_factor >= 1.5 ? "text-green-600" : r.profit_factor >= 1 ? "text-gray-700" : "text-red-600"}`}>
+                    {r.profit_factor.toFixed(2)}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
     </div>
   );
+}
+
+function formatDuration(mins: number): string {
+  if (mins < 60) return `${Math.round(mins)}m`;
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }

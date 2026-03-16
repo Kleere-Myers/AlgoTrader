@@ -1,6 +1,8 @@
 """FastAPI app entrypoint — Strategy Engine."""
 
+import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -11,8 +13,10 @@ from pydantic import BaseModel
 
 from strategies.strategy_moving_average import MovingAverageCrossover
 from strategies.strategy_rsi import RSIMeanReversion
+from strategies.strategy_momentum_volume import MomentumVolume
+from strategies.strategy_ml_signal import MLSignalGenerator
 
-app = FastAPI(title="AlgoTrader Strategy Engine", version="0.1.0")
+logger = logging.getLogger(__name__)
 
 DB_PATH = os.environ.get(
     "DUCKDB_PATH",
@@ -20,10 +24,48 @@ DB_PATH = os.environ.get(
 )
 
 # Strategy registry — add new strategies here
+_ml_strategy = MLSignalGenerator()
+
 STRATEGIES = {
     "MovingAverageCrossover": MovingAverageCrossover(),
     "RSIMeanReversion": RSIMeanReversion(),
+    "MomentumVolume": MomentumVolume(),
+    "MLSignalGenerator": _ml_strategy,
 }
+
+
+def _retrain_ml_model():
+    """Weekly retraining job for MLSignalGenerator."""
+    from ml.train import train_model
+    try:
+        result = train_model()
+        _ml_strategy.reload_model()
+        logger.info("ML model retrained: %s", result)
+    except Exception:
+        logger.exception("ML retraining failed")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup/shutdown lifecycle — register APScheduler jobs."""
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.cron import CronTrigger
+
+    scheduler = AsyncIOScheduler()
+    # Retrain every Sunday at 6 PM ET (23:00 UTC in EST, 22:00 UTC in EDT)
+    scheduler.add_job(
+        _retrain_ml_model,
+        CronTrigger(day_of_week="sun", hour=23, minute=0, timezone="US/Eastern"),
+        id="ml_retrain_weekly",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info("APScheduler started — ML retraining scheduled Sunday 6 PM ET")
+    yield
+    scheduler.shutdown()
+
+
+app = FastAPI(title="AlgoTrader Strategy Engine", version="0.1.0", lifespan=lifespan)
 
 # In-memory cache of last backtest results
 _backtest_cache: dict[str, dict] = {}

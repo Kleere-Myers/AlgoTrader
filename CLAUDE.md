@@ -134,5 +134,12 @@ To activate an agent, start your session with:
 "Read CLAUDE.md and AGENT_[NAME].md — you are the [Name] agent."
 Until that phrase is used, treat all agent files as reference documentation only.
 
+## Known Limitations
+- MLSignalGenerator trained on daily bars only (59.4% CV accuracy). Will improve
+  once 5-minute bars accumulate from the live WebSocket feed. Revisit retraining
+  on intraday data in a future phase.
+- LightGBM labels remapped from -1/0/1 to 0/1/2 (SELL/HOLD/BUY) for multiclass
+  compatibility. Verify mapping direction if modifying ml/train.py.
+
 ## Files That Must Be Gitignored
 `.env`, `data/`, `models/` (trained ML artifacts), `__pycache__/`, `target/` (Rust build)

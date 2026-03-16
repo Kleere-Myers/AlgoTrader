@@ -65,7 +65,16 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="AlgoTrader Strategy Engine", version="0.1.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # In-memory cache of last backtest results
 _backtest_cache: dict[str, dict] = {}

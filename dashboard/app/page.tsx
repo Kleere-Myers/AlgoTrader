@@ -44,7 +44,7 @@ export default function OverviewPage() {
     strategyApi.getStrategies().then((strats) => {
       const sigs = strats
         .map((s) => s.last_signal)
-        .filter((s): s is Signal => s !== null);
+        .filter((s): s is Signal => s != null);
       setSignals(sigs);
     }).catch(() => {});
   }, []);

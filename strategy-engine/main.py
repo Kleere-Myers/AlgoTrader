@@ -111,6 +111,33 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/bars/{symbol}")
+def get_bars(symbol: str, limit: int = 100):
+    """Return recent OHLCV bars for a symbol from DuckDB."""
+    symbol = symbol.upper()
+    con = _get_db()
+    try:
+        bars = con.execute(
+            "SELECT timestamp, open, high, low, close, volume "
+            "FROM ohlcv_bars WHERE symbol = ? ORDER BY timestamp DESC LIMIT ?",
+            [symbol, limit],
+        ).fetchall()
+    finally:
+        con.close()
+
+    return [
+        {
+            "timestamp": str(r[0]),
+            "open": r[1],
+            "high": r[2],
+            "low": r[3],
+            "close": r[4],
+            "volume": int(r[5]),
+        }
+        for r in reversed(bars)
+    ]
+
+
 @app.get("/strategies")
 def list_strategies():
     return [

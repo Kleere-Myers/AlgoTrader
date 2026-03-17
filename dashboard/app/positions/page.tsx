@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { executionApi } from "@/lib/api";
 import { useSseEvents } from "@/hooks/useSseEvents";
+import Tip from "@/components/Tip";
 import type { Position } from "@/types";
 
 export default function PositionsPage() {
@@ -66,10 +67,10 @@ export default function PositionsPage() {
           <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
             <tr>
               <th className="px-4 py-3">Symbol</th>
-              <th className="px-4 py-3">Qty</th>
-              <th className="px-4 py-3">Avg Entry Price</th>
-              <th className="px-4 py-3">Current Price</th>
-              <th className="px-4 py-3">Unrealized P&amp;L</th>
+              <th className="px-4 py-3">Qty <Tip text="Number of shares you own of this stock." inline /></th>
+              <th className="px-4 py-3">Avg Entry Price <Tip text="The average price you paid per share when buying." inline /></th>
+              <th className="px-4 py-3">Current Price <Tip text="What the stock is worth right now per share." inline /></th>
+              <th className="px-4 py-3">Unrealized P&amp;L <Tip text="Profit or loss if you sold right now. Green means you're up, red means you're down. 'Unrealized' because you haven't sold yet." inline /></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">

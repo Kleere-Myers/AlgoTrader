@@ -5,6 +5,7 @@ import { executionApi, strategyApi } from "@/lib/api";
 import { useSseEvents } from "@/hooks/useSseEvents";
 import type { AccountInfo, Position, OhlcvBar, Signal } from "@/types";
 import CandlestickChart from "@/components/CandlestickChart";
+import Tip from "@/components/Tip";
 
 export default function OverviewPage() {
   const SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"];
@@ -77,11 +78,12 @@ export default function OverviewPage() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Equity" value={account ? `$${account.equity.toLocaleString()}` : "--"} />
-        <StatCard label="Buying Power" value={account ? `$${account.buying_power.toLocaleString()}` : "--"} />
-        <StatCard label="Cash" value={account ? `$${account.cash.toLocaleString()}` : "--"} />
+        <StatCard label="Equity" tip="The total value of your account — cash plus all stocks you currently hold." value={account ? `$${account.equity.toLocaleString()}` : "--"} />
+        <StatCard label="Buying Power" tip="How much money you have available to buy stocks right now." value={account ? `$${account.buying_power.toLocaleString()}` : "--"} />
+        <StatCard label="Cash" tip="Money in your account not currently invested in any stock." value={account ? `$${account.cash.toLocaleString()}` : "--"} />
         <StatCard
           label="SSE Stream"
+          tip="Real-time connection to the trading engine. When connected, the dashboard updates automatically as trades happen."
           value={isConnected ? "Connected" : "Disconnected"}
           color={isConnected ? "text-green-600" : "text-gray-400"}
         />
@@ -164,14 +166,19 @@ function StatCard({
   label,
   value,
   color,
+  tip,
 }: {
   label: string;
   value: string;
   color?: string;
+  tip?: string;
 }) {
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-      <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
+      <p className="text-xs text-gray-400 uppercase tracking-wide">
+        {label}
+        {tip && <Tip text={tip} inline />}
+      </p>
       <p className={`mt-1 text-2xl font-semibold ${color || "text-gray-900"}`}>
         {value}
       </p>

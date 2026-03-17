@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { Order } from "@/types";
 import { executionApi } from "@/lib/api";
+import Tip from "@/components/Tip";
 
 function formatTime(iso: string | null): string {
   if (!iso) return "—";
@@ -85,11 +86,11 @@ export default function OrdersPage() {
           <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
             <tr>
               <th className="px-4 py-3">Symbol</th>
-              <th className="px-4 py-3">Side</th>
-              <th className="px-4 py-3 text-right">Qty</th>
-              <th className="px-4 py-3 text-right">Fill Price</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Strategy</th>
+              <th className="px-4 py-3">Side <Tip text="BUY means shares were purchased. SELL means shares were sold." inline /></th>
+              <th className="px-4 py-3 text-right">Qty <Tip text="Number of shares in this order." inline /></th>
+              <th className="px-4 py-3 text-right">Fill Price <Tip text="The actual price per share when the order was executed. May differ slightly from the price when the signal was generated (this difference is called slippage)." inline /></th>
+              <th className="px-4 py-3">Status <Tip text="'Filled' means the trade completed. 'Pending' means it's waiting. 'Rejected' means the risk rules blocked it." inline /></th>
+              <th className="px-4 py-3">Strategy <Tip text="Which trading strategy triggered this order." inline /></th>
               <th className="px-4 py-3">Submitted</th>
               <th className="px-4 py-3">Filled</th>
             </tr>

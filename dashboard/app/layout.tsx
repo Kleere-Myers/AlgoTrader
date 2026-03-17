@@ -13,6 +13,7 @@ const navItems = [
   { href: "/backtest", label: "Backtest" },
   { href: "/risk", label: "Risk" },
   { href: "/logs", label: "Logs" },
+  { href: "/guide", label: "Guide" },
 ];
 
 export default function RootLayout({

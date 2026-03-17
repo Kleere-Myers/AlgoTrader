@@ -5,6 +5,7 @@ import type { BacktestResult, Strategy } from "@/types";
 import type { BacktestEquityPoint } from "@/types";
 import { strategyApi } from "@/lib/api";
 import EquityCurveChart from "@/components/EquityCurveChart";
+import Tip from "@/components/Tip";
 
 const SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"];
 
@@ -140,13 +141,13 @@ export default function BacktestPage() {
             <tr>
               <th className="px-4 py-3">Strategy</th>
               <th className="px-4 py-3">Symbol</th>
-              <th className="px-4 py-3 text-right">Return %</th>
-              <th className="px-4 py-3 text-right">Sharpe</th>
-              <th className="px-4 py-3 text-right">Max DD %</th>
-              <th className="px-4 py-3 text-right">Win Rate</th>
-              <th className="px-4 py-3 text-right">Trades</th>
-              <th className="px-4 py-3 text-right">Avg Duration</th>
-              <th className="px-4 py-3 text-right">Profit Factor</th>
+              <th className="px-4 py-3 text-right">Return % <Tip text="Total percentage gain or loss over the backtest period. Green is profit, red is loss." inline /></th>
+              <th className="px-4 py-3 text-right">Sharpe <Tip text="Measures return vs risk. Above 1.0 is decent, above 2.0 is very good. Higher means better risk-adjusted performance." inline /></th>
+              <th className="px-4 py-3 text-right">Max DD % <Tip text="Maximum drawdown — the biggest peak-to-valley drop. Shows the worst-case scenario you would have experienced." inline /></th>
+              <th className="px-4 py-3 text-right">Win Rate <Tip text="Percentage of trades that made money. Even 50-55% can be profitable if winners are bigger than losers." inline /></th>
+              <th className="px-4 py-3 text-right">Trades <Tip text="Total number of buy+sell trades executed during the backtest period." inline /></th>
+              <th className="px-4 py-3 text-right">Avg Duration <Tip text="How long the average trade was held before selling." inline /></th>
+              <th className="px-4 py-3 text-right">Profit Factor <Tip text="Total profits divided by total losses. Above 1.0 means profitable overall. Above 1.5 is good." inline /></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">

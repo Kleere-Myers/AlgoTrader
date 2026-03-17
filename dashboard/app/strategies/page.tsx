@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import type { Strategy } from "@/types";
 import { strategyApi } from "@/lib/api";
 import StrategyCard from "@/components/StrategyCard";
+import { useSymbols } from "@/hooks/useSymbols";
 
 export default function StrategiesPage() {
+  const { symbols } = useSymbols();
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +83,7 @@ export default function StrategiesPage() {
             <StrategyCard
               key={s.id}
               strategy={s}
+              symbols={symbols}
               onUpdate={fetchStrategies}
               onBacktestComplete={() => router.push("/backtest")}
             />

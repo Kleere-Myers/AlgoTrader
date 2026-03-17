@@ -18,7 +18,8 @@ from pathlib import Path
 import duckdb
 import yfinance as yf
 
-SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"]
+DEFAULT_SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"]
+SYMBOLS = [s.strip().upper() for s in os.environ.get("SYMBOLS", ",".join(DEFAULT_SYMBOLS)).split(",") if s.strip()]
 BAR_SIZE = "1d"
 
 DEFAULT_DB_PATH = os.environ.get(

@@ -15,9 +15,10 @@ Examples:
 
 Strategy Engine (Python FastAPI):
   - Directory: strategy-engine/
-  - Start: cd strategy-engine && ../.venv/bin/uvicorn main:app --port 8000 &
+  - Start: cd strategy-engine && .venv/bin/uvicorn main:app --port 8000 &
   - Port: 8000
   - Process pattern: "uvicorn main:app --port 8000"
+  - Post-start: Re-apply aggressive risk settings via PATCH /risk/config (check memory for values)
 
 Execution Engine (Rust Axum):
   - Directory: execution-engine/
@@ -46,3 +47,12 @@ Stop then start the target service(s).
 For each of the 3 services, check if the port is in use with `lsof -i :PORT`. Report running/stopped for each, and show the PID if running.
 
 Always report results clearly, one line per service.
+
+**Post-start/restart hook:**
+After the execution engine starts, re-apply the user's preferred risk settings by running:
+```
+curl -s -X PATCH http://localhost:8080/risk/config \
+  -H "Content-Type: application/json" \
+  -d '{"max_daily_loss_pct": 0.05, "max_position_size_pct": 0.20, "max_open_positions": 8, "min_signal_confidence": 0.50, "order_throttle_secs": 120}'
+```
+Report the applied risk config in the status output.

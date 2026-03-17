@@ -13,7 +13,8 @@ from sklearn.metrics import classification_report
 
 from ml.features import FEATURE_COLUMNS, compute_features, compute_labels
 
-SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"]
+DEFAULT_SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"]
+SYMBOLS = [s.strip().upper() for s in os.environ.get("SYMBOLS", ",".join(DEFAULT_SYMBOLS)).split(",") if s.strip()]
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 MODEL_PATH = MODELS_DIR / "lgbm_signal_model.pkl"
 METADATA_PATH = MODELS_DIR / "lgbm_metadata.pkl"
@@ -28,9 +29,10 @@ def load_training_data() -> pd.DataFrame:
     """Load OHLCV bars for all symbols from DuckDB and compute features + labels."""
     con = duckdb.connect(DB_PATH, read_only=True)
     try:
+        placeholders = ", ".join(["?"] * len(SYMBOLS))
         all_bars = con.execute(
             "SELECT symbol, timestamp, open, high, low, close, volume, bar_size "
-            "FROM ohlcv_bars WHERE symbol IN (?, ?, ?, ?, ?, ?) "
+            f"FROM ohlcv_bars WHERE symbol IN ({placeholders}) "
             "ORDER BY symbol, timestamp",
             SYMBOLS,
         ).fetchdf()

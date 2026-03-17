@@ -6,10 +6,11 @@ import type { BacktestEquityPoint } from "@/types";
 import { strategyApi } from "@/lib/api";
 import EquityCurveChart from "@/components/EquityCurveChart";
 import Tip from "@/components/Tip";
+import { useSymbols } from "@/hooks/useSymbols";
 
-const SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"];
 
 export default function BacktestPage() {
+  const { symbols: SYMBOLS } = useSymbols();
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [results, setResults] = useState<BacktestResult[]>([]);
   const [equityData, setEquityData] = useState<Record<string, BacktestEquityPoint[]>>({});

@@ -15,6 +15,9 @@ from strategies.strategy_moving_average import MovingAverageCrossover
 from strategies.strategy_rsi import RSIMeanReversion
 from strategies.strategy_momentum_volume import MomentumVolume
 from strategies.strategy_ml_signal import MLSignalGenerator
+from strategies.strategy_vwap import VWAPStrategy
+from strategies.strategy_orb import OpeningRangeBreakout
+from strategies.strategy_news_sentiment import NewsSentimentStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +25,9 @@ DB_PATH = os.environ.get(
     "DUCKDB_PATH",
     str(Path(__file__).resolve().parent.parent / "data" / "algotrader.duckdb"),
 )
+
+DEFAULT_SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"]
+SYMBOLS = [s.strip().upper() for s in os.environ.get("SYMBOLS", ",".join(DEFAULT_SYMBOLS)).split(",") if s.strip()]
 
 # Strategy registry — add new strategies here
 _ml_strategy = MLSignalGenerator()
@@ -31,6 +37,9 @@ STRATEGIES = {
     "RSIMeanReversion": RSIMeanReversion(),
     "MomentumVolume": MomentumVolume(),
     "MLSignalGenerator": _ml_strategy,
+    "VWAPStrategy": VWAPStrategy(),
+    "OpeningRangeBreakout": OpeningRangeBreakout(),
+    "NewsSentimentStrategy": NewsSentimentStrategy(),
 }
 
 
@@ -109,6 +118,41 @@ class SignalRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+class SymbolRequest(BaseModel):
+    symbol: str
+
+
+@app.get("/symbols")
+def get_symbols():
+    return {"symbols": SYMBOLS}
+
+
+@app.post("/symbols", status_code=201)
+def add_symbol(req: SymbolRequest):
+    symbol = req.symbol.strip().upper()
+    if not symbol:
+        raise HTTPException(status_code=400, detail="Symbol cannot be empty")
+    if len(symbol) > 10:
+        raise HTTPException(status_code=400, detail="Symbol too long")
+    if symbol in SYMBOLS:
+        raise HTTPException(status_code=409, detail=f"Symbol '{symbol}' already exists")
+    SYMBOLS.append(symbol)
+    logger.info("Symbol added: %s — active list: %s", symbol, SYMBOLS)
+    return {"symbols": SYMBOLS}
+
+
+@app.delete("/symbols/{symbol}")
+def remove_symbol(symbol: str):
+    symbol = symbol.strip().upper()
+    if symbol not in SYMBOLS:
+        raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found")
+    if len(SYMBOLS) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot remove the last symbol")
+    SYMBOLS.remove(symbol)
+    logger.info("Symbol removed: %s — active list: %s", symbol, SYMBOLS)
+    return {"symbols": SYMBOLS}
 
 
 @app.get("/bars/{symbol}")
@@ -252,3 +296,73 @@ def get_strategy_performance(strategy_id: str):
         "avg_confidence": round(float(row[4]), 4),
         "signals_by_symbol": {sym: int(cnt) for sym, cnt in by_symbol_rows},
     }
+
+
+# ---------------------------------------------------------------------------
+# Company info + News endpoints
+# ---------------------------------------------------------------------------
+
+import time as _time
+
+_company_cache: dict[str, tuple[float, dict]] = {}
+_COMPANY_CACHE_TTL = 900  # 15 minutes
+
+
+@app.get("/company/{symbol}")
+def get_company_info(symbol: str):
+    """Return company details from yfinance with 15-minute TTL cache."""
+    symbol = symbol.upper()
+    now = _time.time()
+
+    if symbol in _company_cache:
+        cached_at, info = _company_cache[symbol]
+        if now - cached_at < _COMPANY_CACHE_TTL:
+            return info
+
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        raw = ticker.info or {}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"yfinance lookup failed: {exc}")
+
+    if not raw or raw.get("symbol") is None:
+        raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not found")
+
+    prev_close = raw.get("previousClose") or raw.get("regularMarketPreviousClose")
+    current = raw.get("currentPrice") or raw.get("regularMarketPrice")
+    change_pct = None
+    if current and prev_close and prev_close > 0:
+        change_pct = round((current - prev_close) / prev_close * 100, 2)
+
+    result = {
+        "symbol": symbol,
+        "name": raw.get("shortName") or raw.get("longName") or symbol,
+        "sector": raw.get("sector"),
+        "industry": raw.get("industry"),
+        "market_cap": raw.get("marketCap"),
+        "summary": raw.get("longBusinessSummary"),
+        "current_price": current,
+        "previous_close": prev_close,
+        "change_pct": change_pct,
+        "fifty_two_week_high": raw.get("fiftyTwoWeekHigh"),
+        "fifty_two_week_low": raw.get("fiftyTwoWeekLow"),
+        "average_volume": raw.get("averageVolume"),
+    }
+
+    _company_cache[symbol] = (now, result)
+    return result
+
+
+@app.get("/news/{symbol}")
+def get_news(symbol: str):
+    """Return recent news with FinBERT sentiment scores."""
+    symbol = symbol.upper()
+
+    from strategies.news_fetcher import fetch_news as _fetch_news
+    from strategies.sentiment import score_articles as _score_articles
+
+    articles = _fetch_news(symbol)
+    scored = _score_articles(articles)
+
+    return {"symbol": symbol, "articles": scored}

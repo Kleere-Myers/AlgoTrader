@@ -1,4 +1,4 @@
-import type { AccountInfo, Position, Order, Strategy, BacktestResult, BacktestEquityPoint, OhlcvBar, RiskConfig } from "@/types";
+import type { AccountInfo, Position, Order, Strategy, BacktestResult, BacktestEquityPoint, OhlcvBar, RiskConfig, CompanyInfo, NewsArticle } from "@/types";
 
 const EXECUTION_URL =
   process.env.NEXT_PUBLIC_EXECUTION_URL || "http://localhost:8080";
@@ -43,6 +43,17 @@ export const executionApi = {
 };
 
 export const strategyApi = {
+  getSymbols: () => fetchJson<{ symbols: string[] }>(`${STRATEGY_URL}/symbols`),
+  addSymbol: (symbol: string) =>
+    fetchJson<{ symbols: string[] }>(`${STRATEGY_URL}/symbols`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol }),
+    }),
+  removeSymbol: (symbol: string) =>
+    fetchJson<{ symbols: string[] }>(`${STRATEGY_URL}/symbols/${symbol}`, {
+      method: "DELETE",
+    }),
   getStrategies: () => fetchJson<Strategy[]>(`${STRATEGY_URL}/strategies`),
   updateStrategy: (id: string, patch: Partial<Strategy>) =>
     fetchJson<Strategy>(`${STRATEGY_URL}/strategies/${id}`, {
@@ -60,4 +71,8 @@ export const strategyApi = {
     fetchJson<BacktestEquityPoint[]>(`${STRATEGY_URL}/backtest/${strategy}/${symbol}/equity`),
   getBars: (symbol: string) =>
     fetchJson<OhlcvBar[]>(`${STRATEGY_URL}/bars/${symbol}`),
+  getCompanyInfo: (symbol: string) =>
+    fetchJson<CompanyInfo>(`${STRATEGY_URL}/company/${symbol}`),
+  getNews: (symbol: string) =>
+    fetchJson<{ symbol: string; articles: NewsArticle[] }>(`${STRATEGY_URL}/news/${symbol}`),
 };

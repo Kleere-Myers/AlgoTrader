@@ -142,7 +142,7 @@ function StrategiesSection() {
     <>
       <SectionTitle>Your Strategies Explained</SectionTitle>
       <P>
-        You have four strategies, each using a different approach to decide when to trade.
+        You have seven strategies, each using a different approach to decide when to trade.
         Having multiple strategies is like getting opinions from different experts — sometimes
         they agree, sometimes they do not.
       </P>
@@ -174,6 +174,26 @@ function StrategiesSection() {
           emoji="🤖"
           simple={`Uses machine learning (AI) to find patterns in the data that humans might miss. It was trained on historical data and looks at dozens of indicators at once to predict whether a stock will go up, down, or stay flat. It only acts when it is at least 65% confident.`}
           example={`The AI model analyzes RSI, MACD, volume, price momentum, and other factors together. If it predicts a stock will rise at least 0.3% with 70% confidence, it says "BUY."`}
+        />
+
+        <StrategyExplainer
+          name="VWAP Strategy"
+          emoji="⚖️"
+          simple={`Compares the current price to the Volume Weighted Average Price (VWAP) — the average price weighted by how many shares were traded at each level. If a stock dips below VWAP, it is "cheaper than average" for the day and may bounce back. If it rises above VWAP, it is "expensive" and may pull back.`}
+          example={`If AAPL's VWAP is $185.00 and the price drops to $184.00 (below VWAP), the strategy says "BUY" because the stock is trading below the day's average price and institutional buyers often step in near VWAP.`}
+        />
+
+        <StrategyExplainer
+          name="Opening Range Breakout"
+          emoji="📐"
+          simple={`Watches the first 30 minutes of trading (6 bars at 5-minute intervals) to establish a price range — the day's opening high and low. If the price later breaks above that range with strong volume, it signals a potential uptrend. If it breaks below, it signals a potential downtrend.`}
+          example={`If SPY trades between $510 and $512 in the first 30 minutes, and then jumps to $513 with 1.5x normal volume, the strategy says "BUY" — the breakout suggests buyers are in control.`}
+        />
+        <StrategyExplainer
+          name="News Sentiment (FinBERT)"
+          emoji="📰"
+          simple={`Uses AI (FinBERT) to read recent news headlines about a stock and determine whether the overall sentiment is positive, negative, or neutral. If the news is strongly positive, it buys. If strongly negative, it sells. This adds a fundamentals-based signal alongside the technical strategies.`}
+          example={`If there are 5 recent headlines about AAPL and 4 of them are positive ("Apple reports record revenue", "Strong iPhone demand"), the average sentiment score exceeds the bullish threshold and the strategy says "BUY."`}
         />
       </div>
     </>
@@ -213,6 +233,10 @@ function PagesSection() {
           description="Your home base. Shows your account balance, a price chart for any stock you select, your currently open positions (stocks you own), and a live feed of system events. This is where you get the big picture at a glance."
         />
         <PageExplainer
+          name="Watchlist"
+          description="A card-based view of every symbol you are tracking. Each card shows the company name, current price with daily change, sector and industry tags, a 52-week price range bar, and the latest news headlines with AI sentiment dots (green = positive, red = negative, gray = neutral). Auto-refreshes every 60 seconds."
+        />
+        <PageExplainer
           name="Positions"
           description="Shows every stock you currently hold. For each one, you can see how many shares you own, what you paid, what it's worth now, and whether you're making or losing money on it (shown in green or red). Updates automatically when trades happen."
         />
@@ -222,7 +246,7 @@ function PagesSection() {
         />
         <PageExplainer
           name="Strategies"
-          description="Control center for your four trading strategies. You can turn each one on or off, change their settings (like how sensitive they are), and run backtests — which test the strategy against historical data to see how it would have performed."
+          description="Control center for your seven trading strategies. You can turn each one on or off, change their settings (like how sensitive they are), and run backtests — which test the strategy against historical data to see how it would have performed."
         />
         <PageExplainer
           name="Backtest"
@@ -326,18 +350,22 @@ function GlossarySection() {
         <Term term="Equity" definition="The total value of your account — cash plus the current value of all stocks you hold." />
         <Term term="ETF" definition="Exchange-Traded Fund. A basket of stocks bundled together and traded as a single ticker. SPY tracks the S&P 500 (500 largest US companies). QQQ tracks the Nasdaq 100 (100 largest tech companies)." />
         <Term term="Fill / Filled" definition="When your order actually executes. You place an order to buy, and when someone sells to you, the order is 'filled.' The fill price is what you actually paid." />
+        <Term term="FinBERT" definition="A version of the BERT AI language model fine-tuned specifically for financial text. It reads news headlines and classifies them as positive, negative, or neutral from a financial perspective. Used by the News Sentiment strategy." />
         <Term term="HOLD" definition="A signal from a strategy that says 'do nothing right now.' No trade is placed." />
         <Term term="MACD" definition="Moving Average Convergence Divergence. A momentum indicator that shows the relationship between two moving averages. When the MACD line crosses above the signal line, it can indicate upward momentum." />
+        <Term term="Opening Range" definition="The price range (high and low) established during the first N bars of the trading session. Breakouts above or below this range often set the trend for the rest of the day." />
         <Term term="Paper Trading" definition="Simulated trading with fake money. Everything works exactly like real trading, but no real money is at risk. Always paper trade first before going live." />
         <Term term="P&L (Profit & Loss)" definition="How much money you've made or lost. Green (positive) means profit. Red (negative) means loss. 'Unrealized' P&L is for positions you still hold — it's not locked in until you sell." />
         <Term term="Position" definition="A stock you currently own. If you bought 10 shares of Apple, that's a position in AAPL." />
         <Term term="Profit Factor" definition="Total winning trades divided by total losing trades. Above 1.0 means you're making more than you're losing. Above 1.5 is generally good." />
         <Term term="RSI (Relative Strength Index)" definition="A number from 0 to 100 measuring how fast a stock's price has been rising or falling. Below 30 means 'oversold' (may bounce up). Above 70 means 'overbought' (may pull back). The sweet spot is around 50." />
+        <Term term="Sentiment Analysis" definition="Using AI to determine whether a piece of text (like a news headline) is positive, negative, or neutral. In trading, bullish sentiment across multiple news sources can indicate buying interest, while bearish sentiment may signal selling pressure." />
         <Term term="Sharpe Ratio" definition="A score that measures how good the returns are compared to the risk taken. It answers: 'am I being rewarded enough for the risk?' Above 1.0 is decent, above 2.0 is very good." />
         <Term term="Signal" definition="A recommendation from a strategy: BUY (purchase shares), SELL (sell shares you own), or HOLD (do nothing)." />
         <Term term="Slippage" definition="The difference between the price you expected and the price you actually got. If you tried to buy at $100 but got filled at $100.05, that's $0.05 of slippage." />
         <Term term="SMA (Simple Moving Average)" definition="The average closing price over a set number of bars. A 10-bar SMA averages the last 10 closing prices. It smooths out noise and shows the general trend direction." />
         <Term term="SSE (Server-Sent Events)" definition="The technology that makes the dashboard update in real time without refreshing the page. The server pushes events (trades, position updates, etc.) to your browser as they happen." />
+        <Term term="VWAP" definition="Volume Weighted Average Price. The average price of a stock weighted by the volume traded at each price level. Institutional traders use VWAP as a benchmark — trading below VWAP is considered 'cheap' and above is 'expensive.'" />
         <Term term="Volume" definition="The number of shares traded during a time period. High volume often confirms that a price move is significant — many people agree on the direction." />
         <Term term="Win Rate" definition="The percentage of trades that made money. A 60% win rate means 6 out of 10 trades were profitable. Even 50-55% can be good if your winners are bigger than your losers." />
       </div>

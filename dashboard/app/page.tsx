@@ -6,9 +6,11 @@ import { useSseEvents } from "@/hooks/useSseEvents";
 import type { AccountInfo, Position, OhlcvBar, Signal } from "@/types";
 import CandlestickChart from "@/components/CandlestickChart";
 import Tip from "@/components/Tip";
+import { useSymbols } from "@/hooks/useSymbols";
 
 export default function OverviewPage() {
-  const SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"];
+  const { symbols: SYMBOLS, addSymbol, removeSymbol, error: symbolError } = useSymbols();
+  const [newSymbol, setNewSymbol] = useState("");
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +89,64 @@ export default function OverviewPage() {
           value={isConnected ? "Connected" : "Disconnected"}
           color={isConnected ? "text-green-600" : "text-gray-400"}
         />
+      </div>
+
+      {/* Symbol management */}
+      <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold">
+            Symbols
+            <Tip text="The stocks and ETFs that AlgoTrader monitors. Add or remove tickers here. Changes take effect immediately for the strategy engine." inline />
+          </h3>
+          <form
+            className="flex gap-2"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const sym = newSymbol.trim().toUpperCase();
+              if (!sym) return;
+              try {
+                await addSymbol(sym);
+                setNewSymbol("");
+              } catch {}
+            }}
+          >
+            <input
+              type="text"
+              value={newSymbol}
+              onChange={(e) => setNewSymbol(e.target.value)}
+              placeholder="e.g. AMZN"
+              className="text-sm border border-gray-200 rounded px-2 py-1.5 w-28 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+            <button
+              type="submit"
+              className="text-xs px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700"
+            >
+              Add
+            </button>
+          </form>
+        </div>
+        {symbolError && (
+          <p className="text-red-500 text-xs mb-2">{symbolError}</p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {SYMBOLS.map((sym) => (
+            <span
+              key={sym}
+              className="inline-flex items-center gap-1 text-sm px-2.5 py-1 rounded-full bg-gray-100 text-gray-700"
+            >
+              {sym}
+              <button
+                onClick={async () => {
+                  try { await removeSymbol(sym); } catch {}
+                }}
+                className="text-gray-400 hover:text-red-500 text-xs ml-0.5"
+                title={`Remove ${sym}`}
+              >
+                &times;
+              </button>
+            </span>
+          ))}
+        </div>
       </div>
 
       {/* Candlestick chart */}

@@ -102,8 +102,13 @@ Stored in `.env` at project root. `.env` is gitignored. Never log API keys.
 
 ---
 
-## Instrument Universe (v1)
-SPY, QQQ, AAPL, MSFT, NVDA, GOOGL
+## Instrument Universe (v2)
+**Core:** SPY, QQQ, AAPL, MSFT, NVDA, GOOGL
+**AI Energy:** CEG, GEV, VST, NEE, BE, CCJ, OKLO, LEU, EVRG, PEG, FE, ED
+
+Symbol list is managed at runtime via `GET/POST/DELETE /symbols` on the strategy engine.
+Default list is set via `SYMBOLS` env var or `DEFAULT_SYMBOLS` in `strategy-engine/main.py`.
+
 Regular session only: 9:30 AM — 4:00 PM ET
 All positions auto-closed by 3:45 PM ET
 
@@ -125,11 +130,11 @@ All positions auto-closed by 3:45 PM ET
 Update this line as you progress:
 **CURRENT PHASE: Phase 5 — Live Trading Transition**
 
-## Test Baseline (Phase 4 sign-off)
+## Test Baseline (Phase 5 current)
 - Rust:   26/26
-- Python: 72/72
-- Next.js: 7/7 routes
-- Total:  105 tests
+- Python: 130/130 (includes 20 NewsSentimentStrategy tests)
+- Next.js: 10/10 routes (includes /watchlist)
+- Total:  166 tests
 
 ## Agent Context Files
 - `AGENT_STRATEGY.md` — Python strategy engine agent prompt
@@ -140,12 +145,44 @@ To activate an agent, start your session with:
 "Read CLAUDE.md and AGENT_[NAME].md — you are the [Name] agent."
 Until that phrase is used, treat all agent files as reference documentation only.
 
+## Strategies (7 total)
+
+| Strategy | Type | File |
+|---|---|---|
+| MovingAverageCrossover | Technical | `strategy_moving_average.py` |
+| RSIMeanReversion | Technical | `strategy_rsi.py` |
+| MomentumVolume | Technical | `strategy_momentum_volume.py` |
+| MLSignalGenerator | ML | `strategy_ml_signal.py` |
+| VWAPStrategy | Technical | `strategy_vwap.py` |
+| OpeningRangeBreakout | Technical | `strategy_orb.py` |
+| NewsSentimentStrategy | NLP/FinBERT | `strategy_news_sentiment.py` |
+
+Shared utilities for the news strategy:
+- `strategies/news_fetcher.py` — Alpaca News API + yfinance fallback, 5-min TTL cache
+- `strategies/sentiment.py` — FinBERT (`ProsusAI/finbert`) lazy-loaded sentiment scorer
+
+FinBERT model (~500MB) auto-downloads on first use to `~/.cache/huggingface/`.
+
+## Dashboard Routes (10 total)
+`/` Overview, `/watchlist` Watchlist, `/positions`, `/orders`, `/strategies`,
+`/backtest`, `/risk`, `/logs`, `/guide`
+
+The Watchlist page (`/watchlist`) shows company info + news with sentiment for all
+tracked symbols. Data comes from `GET /company/{symbol}` and `GET /news/{symbol}`
+on the strategy engine.
+
 ## Known Limitations
 - MLSignalGenerator trained on daily bars only (59.4% CV accuracy). Will improve
   once 5-minute bars accumulate from the live WebSocket feed. Revisit retraining
   on intraday data in a future phase.
 - LightGBM labels remapped from -1/0/1 to 0/1/2 (SELL/HOLD/BUY) for multiclass
   compatibility. Verify mapping direction if modifying ml/train.py.
+- NewsSentimentStrategy backtest returns zeros — no historical news data to
+  backtest against.
+
+## Skills (Slash Commands)
+- `/dev <start|stop|restart|status> [service]` — manage dev services
+- `/permissions <show|reset|add <rule>>` — manage tool permissions
 
 ## Files That Must Be Gitignored
 `.env`, `data/`, `models/` (trained ML artifacts), `__pycache__/`, `target/` (Rust build)

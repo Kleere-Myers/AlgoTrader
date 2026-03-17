@@ -93,6 +93,31 @@ export interface RiskConfig {
   eod_flatten_time_et: string;
 }
 
+export interface CompanyInfo {
+  symbol: string;
+  name: string;
+  sector: string | null;
+  industry: string | null;
+  market_cap: number | null;
+  summary: string | null;
+  current_price: number | null;
+  previous_close: number | null;
+  change_pct: number | null;
+  fifty_two_week_high: number | null;
+  fifty_two_week_low: number | null;
+  average_volume: number | null;
+}
+
+export interface NewsArticle {
+  headline: string;
+  summary: string | null;
+  source: string | null;
+  url: string | null;
+  published_at: string | null;
+  sentiment: string | null;
+  sentiment_score: number | null;
+}
+
 export interface OhlcvBar {
   timestamp: string;
   open: number;

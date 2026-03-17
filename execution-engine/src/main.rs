@@ -34,6 +34,16 @@ pub struct AppState {
     pub daily_pnl: Mutex<f64>,
     pub account_equity: Mutex<f64>,
     pub strategy_engine_url: String,
+    pub symbols: Vec<String>,
+}
+
+fn load_symbols() -> Vec<String> {
+    let default = "SPY,QQQ,AAPL,MSFT,NVDA,GOOGL".to_string();
+    let raw = std::env::var("SYMBOLS").unwrap_or(default);
+    raw.split(',')
+        .map(|s| s.trim().to_uppercase())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 #[tokio::main]
@@ -113,6 +123,9 @@ async fn main() {
     let strategy_engine_url = std::env::var("STRATEGY_ENGINE_URL")
         .unwrap_or_else(|_| "http://localhost:8000".into());
 
+    let symbols = load_symbols();
+    info!(symbols = ?symbols, "Loaded symbol list");
+
     // 6. Build shared state
     let state = Arc::new(AppState {
         alpaca: alpaca.clone(),
@@ -123,6 +136,7 @@ async fn main() {
         daily_pnl: Mutex::new(0.0),
         account_equity: Mutex::new(equity),
         strategy_engine_url,
+        symbols,
     });
 
     // 7. Spawn WebSocket bar ingestion task
@@ -166,7 +180,6 @@ async fn main() {
 // WebSocket bar ingestion
 // ---------------------------------------------------------------------------
 
-const SYMBOLS: &[&str] = &["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"];
 const DATA_WS_URL: &str = "wss://stream.data.alpaca.markets/v2/iex";
 
 async fn websocket_loop(state: Arc<AppState>) {
@@ -208,7 +221,7 @@ async fn websocket_loop(state: Arc<AppState>) {
         // Subscribe to bars
         let sub_msg = serde_json::json!({
             "action": "subscribe",
-            "bars": SYMBOLS,
+            "bars": state.symbols,
         });
         if ws.send(Message::Text(sub_msg.to_string())).await.is_err() {
             error!("Failed to send subscribe message");
@@ -717,6 +730,7 @@ mod risk_config_tests {
             daily_pnl: Mutex::new(0.0),
             account_equity: Mutex::new(100_000.0),
             strategy_engine_url: "http://localhost:8000".into(),
+            symbols: vec!["SPY".into(), "QQQ".into(), "AAPL".into(), "MSFT".into(), "NVDA".into(), "GOOGL".into()],
         })
     }
 

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::models::Position;
+use crate::models::{Position, TradeType};
 
 /// In-memory position tracker, synced to DuckDB on changes.
 #[derive(Debug, Clone)]
@@ -34,6 +34,22 @@ impl PositionTracker {
         self.positions.values().cloned().collect()
     }
 
+    /// Return only day-trading positions (for EOD flatten).
+    pub fn day_positions(&self) -> Vec<Position> {
+        self.positions.values()
+            .filter(|p| p.trade_type == TradeType::Day)
+            .cloned()
+            .collect()
+    }
+
+    /// Return only swing-trading positions.
+    pub fn swing_positions(&self) -> Vec<Position> {
+        self.positions.values()
+            .filter(|p| p.trade_type == TradeType::Swing)
+            .cloned()
+            .collect()
+    }
+
     /// Update or create a position after a fill.
     pub fn update_on_fill(
         &mut self,
@@ -41,6 +57,9 @@ impl PositionTracker {
         side: &str,
         qty: f64,
         fill_price: f64,
+        trade_type: TradeType,
+        stop_loss_price: Option<f64>,
+        take_profit_price: Option<f64>,
     ) -> Option<Position> {
         let existing = self.positions.get(symbol).cloned();
 
@@ -52,6 +71,9 @@ impl PositionTracker {
                     avg_entry_price: fill_price,
                     current_price: fill_price,
                     unrealized_pnl: 0.0,
+                    trade_type,
+                    stop_loss_price,
+                    take_profit_price,
                 };
                 self.positions.insert(symbol.to_string(), pos.clone());
                 Some(pos)

@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS signals (
     direction       VARCHAR NOT NULL CHECK (direction IN ('BUY', 'SELL', 'HOLD')),
     confidence      DOUBLE NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0),
     reason          VARCHAR,
-    metadata        JSON
+    metadata        JSON,
+    trade_type      VARCHAR NOT NULL DEFAULT 'day' CHECK (trade_type IN ('day', 'swing'))
 );
 
 -- Order history
@@ -63,7 +64,8 @@ CREATE TABLE IF NOT EXISTS orders (
     status          VARCHAR NOT NULL DEFAULT 'pending',
     strategy_name   VARCHAR,
     created_at      TIMESTAMP NOT NULL DEFAULT current_timestamp,
-    filled_at       TIMESTAMP
+    filled_at       TIMESTAMP,
+    trade_type      VARCHAR NOT NULL DEFAULT 'day' CHECK (trade_type IN ('day', 'swing'))
 );
 
 -- Current open positions
@@ -73,7 +75,10 @@ CREATE TABLE IF NOT EXISTS positions (
     avg_entry_price DOUBLE NOT NULL,
     current_price   DOUBLE,
     unrealized_pnl  DOUBLE,
-    updated_at      TIMESTAMP NOT NULL DEFAULT current_timestamp
+    updated_at      TIMESTAMP NOT NULL DEFAULT current_timestamp,
+    trade_type      VARCHAR NOT NULL DEFAULT 'day' CHECK (trade_type IN ('day', 'swing')),
+    stop_loss_price DOUBLE,
+    take_profit_price DOUBLE
 );
 
 -- Daily P&L summary

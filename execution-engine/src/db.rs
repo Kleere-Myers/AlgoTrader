@@ -62,10 +62,14 @@ pub fn update_order_fill(
 
 /// Upsert a position in the positions table.
 pub fn upsert_position(con: &Connection, pos: &Position) -> Result<(), duckdb::Error> {
+    let trade_type_str = match pos.trade_type {
+        crate::models::TradeType::Day => "day",
+        crate::models::TradeType::Swing => "swing",
+    };
     con.execute(
-        "INSERT OR REPLACE INTO positions (symbol, qty, avg_entry_price, current_price, unrealized_pnl, updated_at) \
-         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
-        params![pos.symbol, pos.qty, pos.avg_entry_price, pos.current_price, pos.unrealized_pnl],
+        "INSERT OR REPLACE INTO positions (symbol, qty, avg_entry_price, current_price, unrealized_pnl, updated_at, trade_type, stop_loss_price, take_profit_price) \
+         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)",
+        params![pos.symbol, pos.qty, pos.avg_entry_price, pos.current_price, pos.unrealized_pnl, trade_type_str, pos.stop_loss_price, pos.take_profit_price],
     )?;
     Ok(())
 }
@@ -79,15 +83,25 @@ pub fn delete_position(con: &Connection, symbol: &str) -> Result<(), duckdb::Err
 /// Load all positions from DuckDB.
 pub fn load_positions(con: &Connection) -> Result<Vec<Position>, duckdb::Error> {
     let mut stmt = con.prepare(
-        "SELECT symbol, qty, avg_entry_price, current_price, unrealized_pnl FROM positions",
+        "SELECT symbol, qty, avg_entry_price, current_price, unrealized_pnl, \
+         COALESCE(trade_type, 'day'), stop_loss_price, take_profit_price FROM positions",
     )?;
     let rows = stmt.query_map([], |row| {
+        let tt_str: String = row.get(5)?;
+        let trade_type = if tt_str == "swing" {
+            crate::models::TradeType::Swing
+        } else {
+            crate::models::TradeType::Day
+        };
         Ok(Position {
             symbol: row.get(0)?,
             qty: row.get(1)?,
             avg_entry_price: row.get(2)?,
             current_price: row.get::<_, Option<f64>>(3)?.unwrap_or(0.0),
             unrealized_pnl: row.get::<_, Option<f64>>(4)?.unwrap_or(0.0),
+            trade_type,
+            stop_loss_price: row.get(6)?,
+            take_profit_price: row.get(7)?,
         })
     })?;
     let mut positions = Vec::new();
@@ -101,7 +115,8 @@ pub fn load_positions(con: &Connection) -> Result<Vec<Position>, duckdb::Error> 
 pub fn load_orders(con: &Connection, limit: usize) -> Result<Vec<Order>, duckdb::Error> {
     let sql = format!(
         "SELECT order_id, COALESCE(alpaca_id, ''), symbol, side, qty, filled_price, status, \
-         COALESCE(strategy_name, ''), CAST(created_at AS VARCHAR), CAST(filled_at AS VARCHAR) \
+         COALESCE(strategy_name, ''), CAST(created_at AS VARCHAR), CAST(filled_at AS VARCHAR), \
+         COALESCE(trade_type, 'day') \
          FROM orders ORDER BY created_at DESC LIMIT {}",
         limit
     );
@@ -109,6 +124,12 @@ pub fn load_orders(con: &Connection, limit: usize) -> Result<Vec<Order>, duckdb:
     let rows = stmt.query_map([], |row| {
         let alpaca_id: String = row.get(1)?;
         let strategy_name: String = row.get(7)?;
+        let tt_str: String = row.get(10)?;
+        let trade_type = if tt_str == "swing" {
+            crate::models::TradeType::Swing
+        } else {
+            crate::models::TradeType::Day
+        };
         Ok(Order {
             order_id: row.get(0)?,
             alpaca_id: if alpaca_id.is_empty() { None } else { Some(alpaca_id) },
@@ -120,6 +141,7 @@ pub fn load_orders(con: &Connection, limit: usize) -> Result<Vec<Order>, duckdb:
             strategy_name: if strategy_name.is_empty() { String::new() } else { strategy_name },
             created_at: row.get(8)?,
             filled_at: row.get(9)?,
+            trade_type,
         })
     })?;
     let mut orders = Vec::new();
@@ -137,7 +159,7 @@ pub fn get_recent_bars(
     limit: usize,
 ) -> Result<Vec<Bar>, duckdb::Error> {
     let mut stmt = con.prepare(
-        "SELECT symbol, timestamp, open, high, low, close, volume \
+        "SELECT symbol, CAST(timestamp AS VARCHAR), open, high, low, close, volume \
          FROM ohlcv_bars WHERE symbol = ? AND bar_size = ? \
          ORDER BY timestamp DESC LIMIT ?",
     )?;

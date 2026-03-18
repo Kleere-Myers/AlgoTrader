@@ -16,6 +16,7 @@ class Signal:
     reason: str
     strategy_name: str
     timestamp: str  # ISO 8601 UTC
+    trade_type: Literal["day", "swing"] = "day"
 
     def to_dict(self) -> dict:
         return asdict(self)

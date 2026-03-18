@@ -1,8 +1,8 @@
 # AlgoTrader Personal — Claude Code Project Context
 
 ## What This Project Is
-A self-hosted personal automated trading system for day trading US equities and ETFs.
-Built for personal use only. Not licensed for distribution.
+A self-hosted personal automated trading system for day trading and swing trading
+US equities and ETFs. Built for personal use only. Not licensed for distribution.
 Full PRD is in `AlgoTrader_PRD.docx` at the project root — read it before making
 architectural decisions.
 
@@ -57,11 +57,13 @@ Consumed by: execution-engine
   "confidence": 0.75,
   "reason": "RSI crossed below 30",
   "strategy_name": "RSIMeanReversion",
-  "timestamp": "2026-03-16T14:32:00Z"
+  "timestamp": "2026-03-16T14:32:00Z",
+  "trade_type": "day"
 }
 ```
 `direction` must be exactly: `BUY`, `SELL`, or `HOLD`
 `confidence` must be a float between 0.0 and 1.0
+`trade_type` must be `"day"` or `"swing"` (defaults to `"day"` if omitted)
 
 ### 2. SSE Event Format
 Produced by: execution-engine
@@ -82,6 +84,14 @@ Dashboard never writes to the database directly — only reads via service APIs.
 Tables: `ohlcv_bars`, `signals`, `orders`, `positions`, `daily_pnl`, `strategy_config`
 Schema definition: `scripts/init_db.py`
 Database file: `data/algotrader.duckdb` (gitignored)
+
+**DuckDB version MUST match across both services.** Currently pinned to **1.2.x**
+(`duckdb = "1.1"` in Cargo.toml resolves to 1.2.2; `duckdb>=1.2,<1.3` in requirements.txt).
+Mismatched versions cause silent storage-format incompatibility — bars won't persist.
+
+**Rust DuckDB queries must CAST TIMESTAMP columns to VARCHAR** before reading into
+String fields (e.g. `CAST(timestamp AS VARCHAR)`). The 1.2 Rust driver does not
+auto-coerce TIMESTAMP → String like 0.10 did.
 
 ---
 
@@ -110,7 +120,7 @@ Symbol list is managed at runtime via `GET/POST/DELETE /symbols` on the strategy
 Default list is set via `SYMBOLS` env var or `DEFAULT_SYMBOLS` in `strategy-engine/main.py`.
 
 Regular session only: 9:30 AM — 4:00 PM ET
-All positions auto-closed by 3:45 PM ET
+Day positions auto-closed by 3:45 PM ET (swing positions are exempt)
 
 ---
 
@@ -123,6 +133,7 @@ All positions auto-closed by 3:45 PM ET
 5. Every new strategy must extend `BaseStrategy`. No standalone strategy scripts.
 6. All Rust order submission must pass risk validation BEFORE calling Alpaca API.
 7. `.env` and `data/` are always in `.gitignore`.
+8. DuckDB version must stay aligned between Python and Rust. Never upgrade one without the other.
 
 ---
 
@@ -131,10 +142,10 @@ Update this line as you progress:
 **CURRENT PHASE: Phase 5 — Live Trading Transition**
 
 ## Test Baseline (Phase 5 current)
-- Rust:   26/26
-- Python: 130/130 (includes 20 NewsSentimentStrategy tests)
+- Rust:   34/34 (includes 8 swing risk tests)
+- Python: 160/160 (includes swing trading: 9 composite + 10 multi-timeframe + 11 relative strength)
 - Next.js: 10/10 routes (includes /watchlist)
-- Total:  166 tests
+- Total:  204 tests
 
 ## Agent Context Files
 - `AGENT_STRATEGY.md` — Python strategy engine agent prompt
@@ -145,8 +156,9 @@ To activate an agent, start your session with:
 "Read CLAUDE.md and AGENT_[NAME].md — you are the [Name] agent."
 Until that phrase is used, treat all agent files as reference documentation only.
 
-## Strategies (7 total)
+## Strategies (9 total — 7 day + 2 swing)
 
+### Day Trading Strategies
 | Strategy | Type | File |
 |---|---|---|
 | MovingAverageCrossover | Technical | `strategy_moving_average.py` |
@@ -156,6 +168,17 @@ Until that phrase is used, treat all agent files as reference documentation only
 | VWAPStrategy | Technical | `strategy_vwap.py` |
 | OpeningRangeBreakout | Technical | `strategy_orb.py` |
 | NewsSentimentStrategy | NLP/FinBERT | `strategy_news_sentiment.py` |
+
+### Swing Trading Strategies
+| Strategy | Type | File |
+|---|---|---|
+| MultiTimeframeTrend | Weekly EMA + Daily RSI pullback | `strategy_multi_timeframe.py` |
+| RelativeStrength | RS ranking vs SPY benchmark | `strategy_relative_strength.py` |
+
+Swing signals are generated via `POST /signal/swing` using daily bars. A `CompositeScorer`
+(`strategies/composite_scorer.py`) aggregates weighted signals from swing + compatible day
+strategies into a single conviction score. Positions with `trade_type="swing"` are exempt
+from EOD auto-flatten.
 
 Shared utilities for the news strategy:
 - `strategies/news_fetcher.py` — Alpaca News API + yfinance fallback, 5-min TTL cache
@@ -179,6 +202,9 @@ on the strategy engine.
   compatibility. Verify mapping direction if modifying ml/train.py.
 - NewsSentimentStrategy backtest returns zeros — no historical news data to
   backtest against.
+- Strategies need a warmup period after service restart — 5-min bars must
+  accumulate before lookback windows are satisfied (30 bars = ~2.5 hours for
+  MovingAverageCrossover, 14 for RSI, 6 for VWAP/ORB).
 
 ## Skills (Slash Commands)
 - `/dev <start|stop|restart|status> [service]` — manage dev services

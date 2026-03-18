@@ -15,16 +15,20 @@ Examples:
 
 Strategy Engine (Python FastAPI):
   - Directory: strategy-engine/
-  - Start: cd strategy-engine && .venv/bin/uvicorn main:app --port 8000 &
+  - Start: cd strategy-engine && .venv/bin/uvicorn main:app --port 8000 > /tmp/strategy-engine.log 2>&1 &
   - Port: 8000
   - Process pattern: "uvicorn main:app --port 8000"
-  - Post-start: Re-apply aggressive risk settings via PATCH /risk/config (check memory for values)
+  - Log file: /tmp/strategy-engine.log
 
 Execution Engine (Rust Axum):
   - Directory: execution-engine/
-  - Start: cd execution-engine && PATH="$HOME/.cargo/bin:$PATH" cargo run &
+  - Start: cd execution-engine && /home/mmyers/.cargo/bin/cargo run > /tmp/execution-engine.log 2>&1 &
   - Port: 8080
   - Process pattern: "target/debug/execution-engine"
+  - Log file: /tmp/execution-engine.log
+
+Post-start hooks (after BOTH strategy + execution engines are up):
+  - Re-apply aggressive risk settings via PATCH /risk/config (check memory for values)
 
 Dashboard (Next.js):
   - Directory: dashboard/
@@ -38,7 +42,7 @@ Dashboard (Next.js):
 Check if the target service(s) are already running (check the port with `lsof -i :PORT`). If already running, say so and skip. Otherwise start the service in the background. Wait a few seconds and verify the port is listening. Report success or failure for each service.
 
 **stop [service]**
-Find processes using the service port(s) with `lsof -ti :PORT` and kill them. Confirm each service stopped.
+Find processes using the service port(s) with `lsof -ti :PORT` and kill them. Also check `ss -tlnp | grep :PORT` for lingering processes (especially Next.js which may leave orphaned `next-server` processes). Confirm each service stopped.
 
 **restart [service]**
 Stop then start the target service(s).

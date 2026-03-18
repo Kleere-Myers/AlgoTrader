@@ -37,6 +37,8 @@ pub struct Signal {
     pub reason: String,
     pub strategy_name: String,
     pub timestamp: String,
+    #[serde(default)]
+    pub trade_type: TradeType,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -45,6 +47,20 @@ pub enum Direction {
     Buy,
     Sell,
     Hold,
+}
+
+/// Whether a signal/position is day trading or swing trading.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum TradeType {
+    Day,
+    Swing,
+}
+
+impl Default for TradeType {
+    fn default() -> Self {
+        TradeType::Day
+    }
 }
 
 /// OHLCV bar from Alpaca WebSocket or strategy engine.
@@ -67,6 +83,10 @@ pub struct Position {
     pub avg_entry_price: f64,
     pub current_price: f64,
     pub unrealized_pnl: f64,
+    #[serde(default)]
+    pub trade_type: TradeType,
+    pub stop_loss_price: Option<f64>,
+    pub take_profit_price: Option<f64>,
 }
 
 /// Order record for DuckDB.
@@ -82,6 +102,8 @@ pub struct Order {
     pub strategy_name: String,
     pub created_at: String,
     pub filled_at: Option<String>,
+    #[serde(default)]
+    pub trade_type: TradeType,
 }
 
 /// Alpaca order response from POST /v2/orders.
@@ -151,4 +173,38 @@ pub struct SignalResponse {
 pub struct SignalRequest {
     pub symbol: String,
     pub bars: Vec<Bar>,
+}
+
+/// Request body sent to strategy engine POST /signal/swing.
+#[derive(Debug, Clone, Serialize)]
+pub struct SwingSignalRequest {
+    pub symbol: String,
+    pub bars_daily: Vec<Bar>,
+}
+
+/// Response from strategy engine POST /signal/swing.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SwingSignalResponse {
+    pub composite: Signal,
+    pub individual: std::collections::HashMap<String, Signal>,
+}
+
+/// Partial update for PATCH /risk/swing-config.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SwingRiskConfigUpdate {
+    pub max_swing_positions: Option<usize>,
+    pub max_portfolio_heat_pct: Option<f64>,
+    pub per_position_stop_loss_pct: Option<f64>,
+    pub per_position_take_profit_pct: Option<f64>,
+    pub min_composite_confidence: Option<f64>,
+}
+
+/// Response for GET/PATCH /risk/swing-config.
+#[derive(Debug, Clone, Serialize)]
+pub struct SwingRiskConfigResponse {
+    pub max_swing_positions: usize,
+    pub max_portfolio_heat_pct: f64,
+    pub per_position_stop_loss_pct: f64,
+    pub per_position_take_profit_pct: f64,
+    pub min_composite_confidence: f64,
 }

@@ -151,6 +151,18 @@ async fn main() {
         scheduler::eod_flatten_loop(sched_state).await;
     });
 
+    // 8b. Spawn daily swing signal scanner (fires at 4:05 PM ET)
+    let swing_state = state.clone();
+    tokio::spawn(async move {
+        scheduler::daily_swing_signal_loop(swing_state).await;
+    });
+
+    // 8c. Spawn swing stop-loss/take-profit monitor (every 60s during market hours)
+    let stop_state = state.clone();
+    tokio::spawn(async move {
+        scheduler::swing_stop_check_loop(stop_state).await;
+    });
+
     // 9. Build Axum router
     let cors = CorsLayer::new()
         .allow_origin("http://localhost:3000".parse::<axum::http::HeaderValue>().unwrap())
@@ -165,6 +177,9 @@ async fn main() {
         .route("/trading/halt", post(halt_trading))
         .route("/trading/resume", post(resume_trading))
         .route("/risk/config", get(get_risk_config).patch(patch_risk_config))
+        .route("/risk/swing-config", get(get_swing_risk_config).patch(patch_swing_risk_config))
+        .route("/positions/day", get(get_day_positions))
+        .route("/positions/swing", get(get_swing_positions))
         .route("/stream/events", get(stream_events))
         .layer(cors)
         .with_state(state);
@@ -284,9 +299,14 @@ async fn websocket_loop(state: Arc<AppState>) {
                 info!(symbol = %bar.symbol, close = bar.close, "Received bar");
 
                 // Upsert to DuckDB
-                if let Ok(con) = db::connect() {
-                    if let Err(e) = db::upsert_bar(&con, &bar, "5min") {
-                        error!("Failed to upsert bar: {e}");
+                match db::connect() {
+                    Ok(con) => {
+                        if let Err(e) = db::upsert_bar(&con, &bar, "5min") {
+                            error!("Failed to upsert bar: {e}");
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to connect to DuckDB for bar upsert: {e}");
                     }
                 }
 
@@ -306,8 +326,17 @@ async fn process_bar(state: &Arc<AppState>, bar: &Bar) {
 
     // Fetch recent bars from DuckDB for this symbol to give strategy context
     let bars = match db::connect() {
-        Ok(con) => db::get_recent_bars(&con, &bar.symbol, "5min", 50).unwrap_or_default(),
-        Err(_) => vec![bar.clone()],
+        Ok(con) => match db::get_recent_bars(&con, &bar.symbol, "5min", 50) {
+            Ok(b) => b,
+            Err(e) => {
+                error!("get_recent_bars failed for {}: {e}", bar.symbol);
+                vec![bar.clone()]
+            }
+        },
+        Err(e) => {
+            error!("DuckDB connect failed in process_bar: {e}");
+            vec![bar.clone()]
+        }
     };
     if bars.is_empty() {
         return;
@@ -386,6 +415,7 @@ async fn process_bar(state: &Arc<AppState>, bar: &Bar) {
                             strategy_name: signal.strategy_name.clone(),
                             created_at: now.clone(),
                             filled_at: alpaca_order.filled_at.clone(),
+                            trade_type: signal.trade_type.clone(),
                         };
 
                         // Record in DuckDB
@@ -404,7 +434,7 @@ async fn process_bar(state: &Arc<AppState>, bar: &Bar) {
                         // Update position tracker
                         if let Some(fp) = fill_price {
                             let mut positions = state.positions.lock().await;
-                            let pos = positions.update_on_fill(&signal.symbol, side, qty, fp);
+                            let pos = positions.update_on_fill(&signal.symbol, side, qty, fp, signal.trade_type.clone(), None, None);
                             if let Ok(con) = db::connect() {
                                 match pos {
                                     Some(ref p) => { let _ = db::upsert_position(&con, p); }
@@ -706,6 +736,102 @@ async fn stream_events(
 ) -> axum::response::sse::Sse<impl futures::stream::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>>
 {
     state.broadcaster.subscribe()
+}
+
+async fn get_day_positions(State(state): State<Arc<AppState>>) -> Json<Vec<Position>> {
+    let positions = state.positions.lock().await;
+    Json(positions.day_positions())
+}
+
+async fn get_swing_positions(State(state): State<Arc<AppState>>) -> Json<Vec<Position>> {
+    let positions = state.positions.lock().await;
+    Json(positions.swing_positions())
+}
+
+async fn get_swing_risk_config(
+    State(state): State<Arc<AppState>>,
+) -> Json<SwingRiskConfigResponse> {
+    let engine = state.risk_engine.lock().await;
+    Json(SwingRiskConfigResponse {
+        max_swing_positions: engine.swing_config.max_swing_positions,
+        max_portfolio_heat_pct: engine.swing_config.max_portfolio_heat_pct,
+        per_position_stop_loss_pct: engine.swing_config.per_position_stop_loss_pct,
+        per_position_take_profit_pct: engine.swing_config.per_position_take_profit_pct,
+        min_composite_confidence: engine.swing_config.min_composite_confidence,
+    })
+}
+
+async fn patch_swing_risk_config(
+    State(state): State<Arc<AppState>>,
+    Json(update): Json<SwingRiskConfigUpdate>,
+) -> Result<Json<SwingRiskConfigResponse>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+    // Validate pct fields
+    for (name, val) in [
+        ("max_portfolio_heat_pct", update.max_portfolio_heat_pct),
+        ("per_position_stop_loss_pct", update.per_position_stop_loss_pct),
+        ("per_position_take_profit_pct", update.per_position_take_profit_pct),
+        ("min_composite_confidence", update.min_composite_confidence),
+    ] {
+        if let Some(v) = val {
+            if v < 0.0 || v > 1.0 {
+                return Err((
+                    axum::http::StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({
+                        "error": format!("{name} must be between 0.0 and 1.0, got {v}")
+                    })),
+                ));
+            }
+        }
+    }
+
+    if let Some(v) = update.max_swing_positions {
+        if v == 0 || v > 20 {
+            return Err((
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": format!("max_swing_positions must be between 1 and 20, got {v}")
+                })),
+            ));
+        }
+    }
+
+    let response = {
+        let mut engine = state.risk_engine.lock().await;
+        if let Some(v) = update.max_swing_positions {
+            engine.swing_config.max_swing_positions = v;
+        }
+        if let Some(v) = update.max_portfolio_heat_pct {
+            engine.swing_config.max_portfolio_heat_pct = v;
+        }
+        if let Some(v) = update.per_position_stop_loss_pct {
+            engine.swing_config.per_position_stop_loss_pct = v;
+        }
+        if let Some(v) = update.per_position_take_profit_pct {
+            engine.swing_config.per_position_take_profit_pct = v;
+        }
+        if let Some(v) = update.min_composite_confidence {
+            engine.swing_config.min_composite_confidence = v;
+        }
+
+        SwingRiskConfigResponse {
+            max_swing_positions: engine.swing_config.max_swing_positions,
+            max_portfolio_heat_pct: engine.swing_config.max_portfolio_heat_pct,
+            per_position_stop_loss_pct: engine.swing_config.per_position_stop_loss_pct,
+            per_position_take_profit_pct: engine.swing_config.per_position_take_profit_pct,
+            min_composite_confidence: engine.swing_config.min_composite_confidence,
+        }
+    };
+
+    info!(
+        max_swing_positions = response.max_swing_positions,
+        max_portfolio_heat_pct = response.max_portfolio_heat_pct,
+        per_position_stop_loss_pct = response.per_position_stop_loss_pct,
+        per_position_take_profit_pct = response.per_position_take_profit_pct,
+        min_composite_confidence = response.min_composite_confidence,
+        "Swing risk config updated"
+    );
+
+    Ok(Json(response))
 }
 
 #[cfg(test)]

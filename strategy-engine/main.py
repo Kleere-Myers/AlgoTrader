@@ -3,6 +3,7 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,11 @@ from strategies.strategy_momentum_volume import MomentumVolume
 from strategies.strategy_ml_signal import MLSignalGenerator
 from strategies.strategy_vwap import VWAPStrategy
 from strategies.strategy_orb import OpeningRangeBreakout
+from strategies.base import Signal
 from strategies.strategy_news_sentiment import NewsSentimentStrategy
+from strategies.strategy_multi_timeframe import MultiTimeframeTrendAlignment
+from strategies.strategy_relative_strength import RelativeStrengthRanking
+from strategies.composite_scorer import CompositeScorer
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +46,14 @@ STRATEGIES = {
     "OpeningRangeBreakout": OpeningRangeBreakout(),
     "NewsSentimentStrategy": NewsSentimentStrategy(),
 }
+
+# Swing trading strategies (not included in 5-min intraday signal loop)
+SWING_STRATEGIES = {
+    "MultiTimeframeTrend": MultiTimeframeTrendAlignment(),
+    "RelativeStrength": RelativeStrengthRanking(),
+}
+
+_composite_scorer = CompositeScorer()
 
 
 def _retrain_ml_model():
@@ -184,14 +197,15 @@ def get_bars(symbol: str, limit: int = 100):
 
 @app.get("/strategies")
 def list_strategies():
-    return [
-        {
-            "name": s.name,
-            "enabled": True,
-            "params": s.params(),
-        }
+    day_strats = [
+        {"name": s.name, "enabled": True, "params": s.params(), "trade_type": "day"}
         for s in STRATEGIES.values()
     ]
+    swing_strats = [
+        {"name": s.name, "enabled": True, "params": s.params(), "trade_type": "swing"}
+        for s in SWING_STRATEGIES.values()
+    ]
+    return day_strats + swing_strats
 
 
 @app.post("/signal")
@@ -205,7 +219,18 @@ def generate_signals(req: SignalRequest):
 
     signals = []
     for strat in STRATEGIES.values():
-        sig = strat.generate_signal(df, req.symbol.upper())
+        try:
+            sig = strat.generate_signal(df, req.symbol.upper())
+        except Exception as exc:
+            logger.warning("Strategy %s failed for %s: %s", strat.name, req.symbol, exc)
+            sig = Signal(
+                symbol=req.symbol.upper(),
+                direction="HOLD",
+                confidence=0.0,
+                reason=f"Strategy error: {exc}",
+                strategy_name=strat.name,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            )
         signals.append(sig.to_dict())
 
     # Write signals to DuckDB for audit trail
@@ -213,15 +238,87 @@ def generate_signals(req: SignalRequest):
     try:
         for sig in signals:
             con.execute(
-                "INSERT INTO signals (strategy_name, symbol, timestamp, direction, confidence, reason) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO signals (strategy_name, symbol, timestamp, direction, confidence, reason, trade_type) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 [sig["strategy_name"], sig["symbol"], sig["timestamp"],
-                 sig["direction"], sig["confidence"], sig["reason"]],
+                 sig["direction"], sig["confidence"], sig["reason"],
+                 sig.get("trade_type", "day")],
             )
     finally:
         con.close()
 
     return {"signals": signals}
+
+
+class SwingSignalRequest(BaseModel):
+    symbol: str
+    bars_daily: list[BarData]
+
+
+@app.post("/signal/swing")
+def generate_swing_signal(req: SwingSignalRequest):
+    """Generate a composite swing trading signal from daily bars."""
+    if not req.bars_daily:
+        raise HTTPException(status_code=400, detail="No daily bars provided")
+
+    df_daily = pd.DataFrame([b.model_dump() for b in req.bars_daily])
+    df_daily["timestamp"] = pd.to_datetime(df_daily["timestamp"])
+    df_daily = df_daily.sort_values("timestamp").reset_index(drop=True)
+
+    symbol = req.symbol.upper()
+
+    # Run swing-specific strategies on daily bars
+    individual_signals: dict[str, Signal] = {}
+    for strat_name, strat in SWING_STRATEGIES.items():
+        try:
+            sig = strat.generate_signal(df_daily, symbol)
+        except Exception as exc:
+            logger.warning("Swing strategy %s failed for %s: %s", strat_name, symbol, exc)
+            sig = Signal(
+                symbol=symbol, direction="HOLD", confidence=0.0,
+                reason=f"Strategy error: {exc}", strategy_name=strat_name,
+                timestamp=datetime.now(timezone.utc).isoformat(), trade_type="swing",
+            )
+        individual_signals[strat_name] = sig
+
+    # Also run compatible day strategies on daily bars for composite scoring
+    for strat_name in ["RSIMeanReversion", "MomentumVolume", "NewsSentimentStrategy"]:
+        strat = STRATEGIES.get(strat_name)
+        if strat is None:
+            continue
+        try:
+            sig = strat.generate_signal(df_daily, symbol)
+        except Exception as exc:
+            logger.warning("Strategy %s failed for swing composite: %s", strat_name, exc)
+            sig = Signal(
+                symbol=symbol, direction="HOLD", confidence=0.0,
+                reason=f"Strategy error: {exc}", strategy_name=strat_name,
+                timestamp=datetime.now(timezone.utc).isoformat(), trade_type="swing",
+            )
+        individual_signals[strat_name] = sig
+
+    # Composite scoring
+    composite = _composite_scorer.score(symbol, individual_signals)
+
+    # Write all signals to DuckDB for audit trail
+    all_signals = [composite.to_dict()] + [s.to_dict() for s in individual_signals.values()]
+    con = _get_db(read_only=False)
+    try:
+        for sig in all_signals:
+            con.execute(
+                "INSERT INTO signals (strategy_name, symbol, timestamp, direction, confidence, reason, trade_type) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [sig["strategy_name"], sig["symbol"], sig["timestamp"],
+                 sig["direction"], sig["confidence"], sig["reason"],
+                 sig.get("trade_type", "swing")],
+            )
+    finally:
+        con.close()
+
+    return {
+        "composite": composite.to_dict(),
+        "individual": {name: sig.to_dict() for name, sig in individual_signals.items()},
+    }
 
 
 @app.post("/backtest/{strategy}/{symbol}")

@@ -1,5 +1,7 @@
 export type Direction = "BUY" | "SELL" | "HOLD";
 
+export type TradeType = "day" | "swing";
+
 export interface Signal {
   symbol: string;
   direction: Direction;
@@ -7,6 +9,7 @@ export interface Signal {
   reason: string;
   strategy_name: string;
   timestamp: string;
+  trade_type?: TradeType;
 }
 
 export interface Position {
@@ -16,6 +19,9 @@ export interface Position {
   current_price: number;
   unrealized_pnl: number;
   opened_at: string;
+  trade_type?: TradeType;
+  stop_loss_price?: number | null;
+  take_profit_price?: number | null;
 }
 
 export interface Order {
@@ -29,6 +35,7 @@ export interface Order {
   strategy_name: string;
   submitted_at: string;
   filled_at: string | null;
+  trade_type?: TradeType;
 }
 
 export type SseEventType =

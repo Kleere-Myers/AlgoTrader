@@ -32,9 +32,9 @@ service directories as needed.
 
 | Service | Language | Port | Owner Agent |
 |---|---|---|---|
-| `strategy-engine/` | Python 3.12 + FastAPI | 8000 | AGENT_STRATEGY.md |
-| `execution-engine/` | Rust + Axum | 8080 | AGENT_EXECUTION.md |
-| `dashboard/` | Next.js 14 | 3000 | AGENT_DASHBOARD.md |
+| `strategy-engine/` | Python 3.12 + FastAPI | 9100 | AGENT_STRATEGY.md |
+| `execution-engine/` | Rust + Axum | 9101 | AGENT_EXECUTION.md |
+| `dashboard/` | Next.js 14 | 9102 | AGENT_DASHBOARD.md |
 
 **Each agent owns exactly one service directory. Never modify files outside your
 service without explicitly flagging it first.**
@@ -101,11 +101,11 @@ auto-coerce TIMESTAMP → String like 0.10 did.
 ALPACA_API_KEY=
 ALPACA_SECRET_KEY=
 ALPACA_MODE=paper              # NEVER change to live without explicit instruction
-STRATEGY_ENGINE_URL=http://localhost:8000
-EXECUTION_ENGINE_URL=http://localhost:8080
+STRATEGY_ENGINE_URL=http://localhost:9100
+EXECUTION_ENGINE_URL=http://localhost:9101
 DUCKDB_PATH=../data/algotrader.duckdb
-NEXT_PUBLIC_EXECUTION_URL=http://localhost:8080
-NEXT_PUBLIC_STRATEGY_URL=http://localhost:8000
+NEXT_PUBLIC_EXECUTION_URL=http://localhost:9101
+NEXT_PUBLIC_STRATEGY_URL=http://localhost:9100
 ```
 
 Stored in `.env` at project root. `.env` is gitignored. Never log API keys.
@@ -121,6 +121,8 @@ Default list is set via `SYMBOLS` env var or `DEFAULT_SYMBOLS` in `strategy-engi
 
 Regular session only: 9:30 AM — 4:00 PM ET
 Day positions auto-closed by 3:45 PM ET (swing positions are exempt)
+Position prices refresh every 15s during extended hours (4 AM – 8 PM ET)
+Position quantities sync with Alpaca every ~5 minutes + on startup
 
 ---
 
@@ -195,6 +197,8 @@ FinBERT model (~500MB) auto-downloads on first use to `~/.cache/huggingface/`.
 | `GET /market/movers` | Portfolio symbols ranked by daily change % | 60s |
 | `GET /portfolio/pnl-history?range=` | P&L time series + summary (1d/1w/1m/3m/ytd) | none |
 | `GET /news/feed?limit=` | Aggregated news across tracked symbols with thumbnails | none |
+| `GET /company/{symbol}` | Company info + financial ratios (P/E, EPS, beta, dividend, bid/ask, etc.) | 15min |
+| `GET /bars/{symbol}/history?range=` | Historical OHLCV from yfinance (1d/5d/1m/6m/1y/5y) | 5min |
 
 **Important:** The strategy engine must be started with `.env` sourced so Alpaca API
 keys are available for news and market data endpoints.
@@ -204,31 +208,50 @@ keys are available for news and market data endpoints.
 **Design system:** Yahoo Finance dark mode (`/styling` skill for full reference).
 Top navbar layout, full-width, Helvetica Neue font, `#101518` body background.
 
-### Routes (10 total)
+### Routes (10 static + 1 dynamic)
 `/` Overview, `/watchlist` Watchlist, `/positions`, `/orders`, `/strategies`,
-`/backtest`, `/risk`, `/logs`, `/guide`
+`/backtest`, `/risk`, `/logs`, `/guide`, `/quote/[symbol]` (dynamic)
 
 ### Overview Page (`/`)
 Yahoo Finance-inspired layout with:
 - **Markets carousel** — horizontal scrolling cards for S&P 500, Dow 30, Nasdaq,
   Russell 2000, VIX, 10-Yr Bond, Gold, Crude Oil, Bitcoin, EUR/USD
   (data from `GET /market/indices` on strategy engine, 60s cache)
-- **Sector performance** — horizontal bars showing daily change for 11 sector ETFs
-  (`GET /market/sectors`, 5-min cache)
+- **Sectors + Watchlist** — side-by-side: compact sector performance bars + watchlist
+  table with daily performance (symbols link to `/quote/[symbol]`)
 - **Portfolio P&L chart** — area chart with 1D/1W/1M/3M/YTD tabs + financial summary sidebar
   (`GET /portfolio/pnl-history?range=`)
 - **Top Movers** — gainers/losers from tracked symbols (`GET /market/movers`)
+  (symbols link to `/quote/[symbol]`)
 - **News feed** — editorial cards with thumbnails, sentiment, symbol badges
   (`GET /news/feed`)
 
-### Components (14 total)
-Navbar, MarketIndexCard, SparklineChart, SectorPerformanceBar, PnlChart,
-PortfolioSummary, MoversList, NewsCard, CandlestickChart, EquityCurveChart,
-StrategyCard, WatchlistCard, EmergencyHaltButton, Tip
+### Quote Page (`/quote/[symbol]`)
+Yahoo Finance-style quote detail page, accessed via symbol links (not in navbar):
+- **Price header** — symbol, company name, exchange, large price + change with triangle
+- **Interactive chart** — line/candle toggle with 1D/5D/1M/6M/1Y/5Y range tabs
+  (data from `GET /bars/{symbol}/history?range=`)
+- **Key Statistics** — 14-row panel (prev close, open, bid/ask, day range, 52W range,
+  volume, avg volume, market cap, beta, P/E, EPS, dividend, 1y target)
+- **Company Profile** — sector/industry tags + expandable business summary
+- **News** — up to 10 articles with sentiment
+
+### Positions Page (`/positions`)
+- Shows trade type badge (day/swing), qty, entry price, last price, market value,
+  P&L ($), P&L (%), stop loss, take profit for each position
+- Summary badges showing position count by type
+- Symbols link to `/quote/[symbol]`
+- Prices update via SSE POSITION_UPDATE events (every ~15s during extended hours)
+
+### Components (16 total)
+Navbar, MarketIndexCard, SparklineChart, SectorPerformanceBar, WatchlistTable,
+PnlChart, PortfolioSummary, MoversList, NewsCard, CandlestickChart,
+EquityCurveChart, StrategyCard, WatchlistCard, EmergencyHaltButton, Tip
 
 ### Watchlist Page
 Shows company info + news with sentiment for all tracked symbols.
 Data from `GET /company/{symbol}` and `GET /news/{symbol}` on strategy engine.
+Symbols link to `/quote/[symbol]`.
 
 ## Known Limitations
 - MLSignalGenerator trained on daily bars only (59.4% CV accuracy). Will improve
@@ -241,6 +264,8 @@ Data from `GET /company/{symbol}` and `GET /news/{symbol}` on strategy engine.
 - Strategies need a warmup period after service restart — 5-min bars must
   accumulate before lookback windows are satisfied (30 bars = ~2.5 hours for
   MovingAverageCrossover, 14 for RSI, 6 for VWAP/ORB).
+- Positions opened manually in Alpaca are synced with `trade_type=day` by default
+  since Alpaca doesn't track trade type. Set trade type manually if needed.
 
 ## Skills (Slash Commands)
 - `/dev <start|stop|restart|status> [service]` — manage dev services

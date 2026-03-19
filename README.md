@@ -106,7 +106,7 @@ cd execution-engine && RUST_LOG=info cargo run
 cd dashboard && npm run dev
 ```
 
-Open http://localhost:3000 to view the dashboard.
+Open http://localhost:9102 to view the dashboard.
 
 ### Run Tests
 

@@ -17,7 +17,7 @@ When in doubt, reject — do not execute.
 - **Language:** Rust (stable toolchain)
 - **HTTP Framework:** Axum
 - **Async Runtime:** Tokio
-- **Port:** 8080
+- **Port:** 9101
 - **Database:** DuckDB via `duckdb` crate
 - **WebSocket:** tokio-tungstenite (Alpaca market data stream)
 
@@ -215,12 +215,14 @@ On each bar received:
 | GET | /account | Equity, buying power, today's realized P&L |
 | POST | /trading/halt | Set trading_halted = true, broadcast SSE TradingHalted |
 | POST | /trading/resume | Set trading_halted = false, broadcast SSE TradingResumed |
+| GET | /positions/day | Day-trade positions only |
+| GET | /positions/swing | Swing positions only |
 | GET | /stream/events | SSE endpoint — keep-alive, push SseEvents to dashboard |
 | GET | /health | Returns `{"status": "ok", "mode": "paper|live"}` |
 
 ### CORS
 Allow all origins from localhost only:
-`http://localhost:3000` — dashboard in development
+`http://localhost:9102` — dashboard in development
 
 ---
 
@@ -233,19 +235,34 @@ as `text/event-stream` with `data: {json}\n\n` format.
 Broadcast events on:
 - Every position update after an order fills
 - Every order fill confirmation from Alpaca
+- Position price refreshes (every 15s via quote_refresh_loop)
+- Position sync corrections (every ~5 min, payload has `action: "SYNC"`)
 - Trading halt / resume state changes
 - Daily P&L updates (every 5 minutes during market hours)
 - Risk breach rejections (so dashboard can surface them)
 
 ---
 
-## Market Hours & EOD Flatten (scheduler.rs)
+## Scheduler Background Loops (scheduler.rs)
 
-```rust
-// Check every minute during market hours
-// At 15:45 ET on trading days: market-sell all open positions
-// On startup: if positions exist and market is closed, log warning but don't auto-sell
-```
+### EOD Flatten (`eod_flatten_loop`)
+Every 30s, checks if time >= 15:45 ET. Flattens all day-trade positions.
+If a flatten order fails (e.g. qty mismatch), syncs with Alpaca's actual
+holdings and retries with the corrected qty. Swing positions are exempt.
+
+### Quote Refresh (`quote_refresh_loop`)
+Every 15s during extended hours (4 AM – 8 PM ET), fetches latest trade prices
+from Alpaca (`/v2/stocks/trades/latest`) and updates position `current_price`
+and `unrealized_pnl`. Broadcasts SSE `POSITION_UPDATE` so the dashboard updates.
+Every ~5 minutes, does a full position sync with Alpaca's `/v2/positions` to
+correct any qty drift (manual trades, partial fills, etc.).
+
+### Swing Signal Scanner (`daily_swing_signal_loop`)
+Fires once at 4:05 PM ET. Fetches daily bars, generates composite swing signals.
+
+### Swing Stop/Take Monitor (`swing_stop_check_loop`)
+Every 60s during market hours. Checks swing positions against stop-loss and
+take-profit levels.
 
 Use `chrono` with `America/New_York` timezone.
 Simple NYSE holiday list is acceptable for v1 — no need for external calendar API.
@@ -277,11 +294,15 @@ Tables you never modify:
 2. Initialize tracing subscriber
 3. Connect to DuckDB
 4. Fetch Alpaca account — verify auth works
-5. Sync open positions from Alpaca into memory and DuckDB
-6. Sync open orders from Alpaca
+5. Load positions from DuckDB, then sync with Alpaca /v2/positions
+   (corrects qty/price drift, adds missing positions, removes stale ones)
+6. Build shared AppState
 7. Launch WebSocket feed connection (spawn Tokio task)
 8. Launch EOD flatten scheduler (spawn Tokio task)
-9. Start Axum HTTP server on port 8080
+8b. Launch daily swing signal scanner (spawn Tokio task)
+8c. Launch swing stop/take monitor (spawn Tokio task)
+8d. Launch quote refresh loop (spawn Tokio task)
+9. Start Axum HTTP server on port 9101
 ```
 
 If Alpaca auth fails on startup, log error and exit — do not start the server

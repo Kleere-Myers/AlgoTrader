@@ -164,11 +164,90 @@ pub async fn eod_flatten_loop(state: Arc<AppState>) {
                     );
                 }
                 Err(e) => {
-                    error!(
+                    warn!(
                         symbol,
+                        local_qty = qty,
                         reason = "EOD_AUTO_FLATTEN",
-                        "Failed to submit flatten order: {e}"
+                        "Flatten order failed: {e} — syncing with Alpaca and retrying"
                     );
+
+                    // Sync with Alpaca to get correct qty, then retry
+                    let retry_qty = match state.alpaca.get_positions().await {
+                        Ok(alpaca_positions) => {
+                            let mut tracker = state.positions.lock().await;
+                            tracker.sync_with_alpaca(&alpaca_positions);
+                            tracker.get(symbol).map(|p| p.qty).filter(|&q| q > 0.001)
+                        }
+                        Err(sync_err) => {
+                            error!(symbol, "Alpaca position sync failed during flatten retry: {sync_err}");
+                            None
+                        }
+                    };
+
+                    if let Some(actual_qty) = retry_qty {
+                        info!(symbol, actual_qty, "Retrying flatten with synced qty");
+                        match state.alpaca.submit_market_order(symbol, actual_qty, "sell").await {
+                            Ok(alpaca_order) => {
+                                let now = chrono::Utc::now().to_rfc3339();
+                                let order = Order {
+                                    order_id: uuid::Uuid::new_v4().to_string(),
+                                    alpaca_id: Some(alpaca_order.id.clone()),
+                                    symbol: symbol.clone(),
+                                    side: "sell".to_string(),
+                                    qty: actual_qty,
+                                    filled_price: alpaca_order.filled_avg_price.as_ref().and_then(|p| p.parse::<f64>().ok()),
+                                    status: alpaca_order.status.clone(),
+                                    strategy_name: "EOD_AUTO_FLATTEN".to_string(),
+                                    created_at: now,
+                                    filled_at: alpaca_order.filled_at.clone(),
+                                    trade_type: crate::models::TradeType::Day,
+                                };
+                                if let Ok(con) = db::connect() {
+                                    let _ = db::insert_order(&con, &order);
+                                }
+                                state.risk_engine.lock().await.record_order(symbol);
+
+                                let fill_price = crate::poll_for_fill(
+                                    &state, &alpaca_order.id, &order.order_id, "sell", actual_qty, symbol,
+                                ).await;
+
+                                {
+                                    let mut tracker = state.positions.lock().await;
+                                    let updated = tracker.update_on_fill(symbol, "sell", actual_qty, fill_price.unwrap_or(0.0), crate::models::TradeType::Day, None, None);
+                                    if let Ok(con) = db::connect() {
+                                        match updated {
+                                            Some(ref p) => { let _ = db::upsert_position(&con, p); }
+                                            None => { let _ = db::delete_position(&con, symbol); }
+                                        }
+                                    }
+                                }
+
+                                state.broadcaster.send(SseEvent {
+                                    event_type: SseEventType::PositionUpdate,
+                                    timestamp: chrono::Utc::now().to_rfc3339(),
+                                    payload: serde_json::json!({
+                                        "symbol": symbol,
+                                        "action": "EOD_AUTO_FLATTEN",
+                                        "qty_sold": actual_qty,
+                                        "fill_price": fill_price,
+                                        "retry": true,
+                                    }),
+                                });
+
+                                info!(symbol, actual_qty, fill_price, "Position flattened on retry");
+                            }
+                            Err(retry_err) => {
+                                error!(symbol, "Flatten retry also failed: {retry_err}");
+                            }
+                        }
+                    } else {
+                        info!(symbol, "Position no longer exists on Alpaca — removing locally");
+                        let mut tracker = state.positions.lock().await;
+                        tracker.sync_with_alpaca(&[]);  // Will remove if not in empty list
+                        if let Ok(con) = db::connect() {
+                            let _ = db::delete_position(&con, symbol);
+                        }
+                    }
                 }
             }
         }
@@ -553,6 +632,108 @@ pub async fn swing_stop_check_loop(state: Arc<AppState>) {
                 Err(e) => {
                     error!(symbol = %pos.symbol, "Failed to submit swing exit order: {e}");
                 }
+            }
+        }
+    }
+}
+
+/// Background task: refreshes position prices from Alpaca latest trades every 15 seconds.
+/// Every 5 minutes, also syncs position quantities with Alpaca's actual holdings.
+/// Runs during extended hours (4 AM – 8 PM ET) to capture pre-market and after-hours moves.
+pub async fn quote_refresh_loop(state: Arc<AppState>) {
+    let mut tick_count: u32 = 0;
+
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+        tick_count += 1;
+
+        let now_et = Utc::now().with_timezone(&New_York);
+        let today = now_et.date_naive();
+        let current_time = now_et.time();
+
+        // Skip on non-trading days
+        if !is_trading_day(today) {
+            continue;
+        }
+
+        // Extended hours window: 4 AM – 8 PM ET
+        let extended_open = NaiveTime::from_hms_opt(4, 0, 0).unwrap();
+        let extended_close = NaiveTime::from_hms_opt(20, 0, 0).unwrap();
+        if current_time < extended_open || current_time > extended_close {
+            continue;
+        }
+
+        // Every 20 ticks (~5 min), do a full position sync with Alpaca
+        if tick_count % 20 == 0 {
+            match state.alpaca.get_positions().await {
+                Ok(alpaca_positions) => {
+                    let mut tracker = state.positions.lock().await;
+                    let changed = tracker.sync_with_alpaca(&alpaca_positions);
+                    if !changed.is_empty() {
+                        info!(changed = ?changed, "Position sync: updated from Alpaca");
+                        if let Ok(con) = db::connect() {
+                            for sym in &changed {
+                                if let Some(pos) = tracker.get(sym) {
+                                    let _ = db::upsert_position(&con, pos);
+                                } else {
+                                    let _ = db::delete_position(&con, sym);
+                                }
+                            }
+                        }
+                        // Broadcast so dashboard refreshes
+                        state.broadcaster.send(SseEvent {
+                            event_type: SseEventType::PositionUpdate,
+                            timestamp: chrono::Utc::now().to_rfc3339(),
+                            payload: serde_json::json!({
+                                "action": "SYNC",
+                                "changed": changed,
+                            }),
+                        });
+                    }
+                }
+                Err(e) => warn!("Position sync failed: {e}"),
+            }
+            continue; // Skip the price-only update on sync ticks
+        }
+
+        // Normal tick: just update prices
+        let position_symbols: Vec<String> = {
+            let tracker = state.positions.lock().await;
+            tracker.all().iter().map(|p| p.symbol.clone()).collect()
+        };
+
+        if position_symbols.is_empty() {
+            continue;
+        }
+
+        // Fetch latest trade prices in a single API call
+        let prices = match state.alpaca.get_latest_trades(&position_symbols).await {
+            Ok(p) => p,
+            Err(e) => {
+                warn!("Quote refresh failed: {e}");
+                continue;
+            }
+        };
+
+        // Update each position
+        let mut tracker = state.positions.lock().await;
+        for (symbol, price) in &prices {
+            if let Some(updated) = tracker.update_price(symbol, *price) {
+                // Persist to DuckDB
+                if let Ok(con) = db::connect() {
+                    let _ = db::upsert_position(&con, &updated);
+                }
+
+                // Broadcast SSE so dashboard updates in real time
+                state.broadcaster.send(SseEvent {
+                    event_type: SseEventType::PositionUpdate,
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    payload: serde_json::json!({
+                        "symbol": symbol,
+                        "current_price": updated.current_price,
+                        "unrealized_pnl": updated.unrealized_pnl,
+                    }),
+                });
             }
         }
     }

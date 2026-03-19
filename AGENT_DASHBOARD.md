@@ -65,8 +65,8 @@ Key rules:
 ## Environment Variables
 
 ```
-NEXT_PUBLIC_EXECUTION_URL=http://localhost:8080
-NEXT_PUBLIC_STRATEGY_URL=http://localhost:8000
+NEXT_PUBLIC_EXECUTION_URL=http://localhost:9101
+NEXT_PUBLIC_STRATEGY_URL=http://localhost:9100
 ```
 
 ---
@@ -137,7 +137,11 @@ Key types: `Signal`, `Position`, `Order`, `SseEvent`, `AccountInfo`, `Strategy`,
 `BacktestResult`, `RiskConfig`, `CompanyInfo`, `NewsArticle`, `OhlcvBar`
 
 Added for dashboard redesign: `TradeType`, `MarketIndex`, `SectorPerformance`,
-`MarketMover`, `PortfolioPnlHistory`
+`MarketMover`, `PortfolioPnlHistory`, `HistoryRange`
+
+`CompanyInfo` includes extended quote fields: `trailing_pe`, `forward_pe`, `eps`,
+`beta`, `dividend_rate`, `dividend_yield`, `open`, `day_high`, `day_low`, `volume`,
+`bid`, `ask`, `exchange`, `currency`, `target_mean_price`, etc.
 
 ---
 
@@ -145,18 +149,18 @@ Added for dashboard redesign: `TradeType`, `MarketIndex`, `SectorPerformance`,
 
 All API calls go through typed wrappers. Never call fetch directly in pages.
 
-**executionApi** (port 8080):
+**executionApi** (port 9101):
 - `getAccount()`, `getPositions()`, `getOrders()`
 - `haltTrading()`, `resumeTrading()`
 - `getRiskConfig()`, `patchRiskConfig(patch)`
 - `sseUrl` for SSE stream
 
-**strategyApi** (port 8000):
+**strategyApi** (port 9100):
 - `getSymbols()`, `addSymbol()`, `removeSymbol()`
 - `getStrategies()`, `triggerBacktest()`, `getBacktestResult()`
-- `getBars()`, `getCompanyInfo()`, `getNews()`
+- `getBars()`, `getHistoricalBars(symbol, range)`, `getCompanyInfo()`, `getNews()`
 - `getMarketIndices()`, `getSectorPerformance()`
-- `getMarketMovers()`, `getPnlHistory(range)`
+- `getMarketMovers()`, `getPnlHistory(range)`, `getNewsFeed(limit)`
 - `getNewsFeed(limit)`
 
 ---

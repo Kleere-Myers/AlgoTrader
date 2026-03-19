@@ -1,9 +1,9 @@
-import type { AccountInfo, Position, Order, Strategy, BacktestResult, BacktestEquityPoint, OhlcvBar, RiskConfig, CompanyInfo, NewsArticle, MarketIndex, SectorPerformance, MarketMover, PortfolioPnlHistory } from "@/types";
+import type { AccountInfo, Position, Order, Strategy, BacktestResult, BacktestEquityPoint, OhlcvBar, RiskConfig, CompanyInfo, NewsArticle, MarketIndex, SectorPerformance, MarketMover, PortfolioPnlHistory, HistoryRange } from "@/types";
 
 const EXECUTION_URL =
-  process.env.NEXT_PUBLIC_EXECUTION_URL || "http://localhost:8080";
+  process.env.NEXT_PUBLIC_EXECUTION_URL || "http://localhost:9101";
 const STRATEGY_URL =
-  process.env.NEXT_PUBLIC_STRATEGY_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_STRATEGY_URL || "http://localhost:9100";
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { cache: "no-store", ...init });
@@ -71,6 +71,8 @@ export const strategyApi = {
     fetchJson<BacktestEquityPoint[]>(`${STRATEGY_URL}/backtest/${strategy}/${symbol}/equity`),
   getBars: (symbol: string) =>
     fetchJson<OhlcvBar[]>(`${STRATEGY_URL}/bars/${symbol}`),
+  getHistoricalBars: (symbol: string, range: HistoryRange) =>
+    fetchJson<OhlcvBar[]>(`${STRATEGY_URL}/bars/${symbol}/history?range=${range}`),
   getCompanyInfo: (symbol: string) =>
     fetchJson<CompanyInfo>(`${STRATEGY_URL}/company/${symbol}`),
   getNews: (symbol: string) =>

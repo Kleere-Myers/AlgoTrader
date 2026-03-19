@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import type { MarketMover } from "@/types";
 
 interface MoversListProps {
@@ -56,14 +57,14 @@ export default function MoversList({ gainers, losers }: MoversListProps) {
               key={mover.symbol}
               className="flex items-center justify-between px-4 py-2.5"
             >
-              <div className="flex items-center gap-2 min-w-0">
+              <Link href={`/quote/${mover.symbol}`} className="flex items-center gap-2 min-w-0 hover:text-accent-purple-light transition-colors">
                 <span className="text-sm font-bold text-text-primary">
                   {mover.symbol}
                 </span>
                 <span className="text-xs text-text-secondary truncate">
                   {mover.name}
                 </span>
-              </div>
+              </Link>
               <span
                 className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${
                   isPositive

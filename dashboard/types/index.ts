@@ -113,7 +113,28 @@ export interface CompanyInfo {
   fifty_two_week_high: number | null;
   fifty_two_week_low: number | null;
   average_volume: number | null;
+  // Extended quote fields
+  trailing_pe?: number | null;
+  forward_pe?: number | null;
+  eps?: number | null;
+  beta?: number | null;
+  dividend_rate?: number | null;
+  dividend_yield?: number | null;
+  payout_ratio?: number | null;
+  open?: number | null;
+  day_high?: number | null;
+  day_low?: number | null;
+  volume?: number | null;
+  bid?: number | null;
+  ask?: number | null;
+  bid_size?: number | null;
+  ask_size?: number | null;
+  target_mean_price?: number | null;
+  exchange?: string | null;
+  currency?: string | null;
 }
+
+export type HistoryRange = "1d" | "5d" | "1m" | "6m" | "1y" | "5y";
 
 export interface NewsArticle {
   headline: string;

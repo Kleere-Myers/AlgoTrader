@@ -12,7 +12,7 @@ asked, and you flag any change that touches a shared contract before making it.
 
 - **Language:** Python 3.12
 - **Framework:** FastAPI (async)
-- **Port:** 8000
+- **Port:** 9100
 - **Database:** DuckDB via `duckdb` Python package
 - **Scheduler:** APScheduler for market-hours jobs
 - **Broker SDK:** alpaca-py (for market data fetching only — never submit orders)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { executionApi } from "@/lib/api";
 import { useSseEvents } from "@/hooks/useSseEvents";
 import Tip from "@/components/Tip";
@@ -40,19 +41,27 @@ export default function PositionsPage() {
   }, [events]);
 
   const totalPnl = positions.reduce((sum, p) => sum + p.unrealized_pnl, 0);
+  const totalValue = positions.reduce((sum, p) => sum + p.current_price * p.qty, 0);
+  const dayPositions = positions.filter((p) => p.trade_type === "day" || !p.trade_type);
+  const swingPositions = positions.filter((p) => p.trade_type === "swing");
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-bold text-text-primary">Positions</h2>
         {positions.length > 0 && (
-          <span
-            className={`text-lg font-semibold ${
-              totalPnl >= 0 ? "text-gain" : "text-loss"
-            }`}
-          >
-            Total P&amp;L: ${totalPnl.toFixed(2)}
-          </span>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-text-secondary">
+              Value: <span className="text-text-primary font-medium">${totalValue.toFixed(2)}</span>
+            </span>
+            <span
+              className={`text-lg font-semibold ${
+                totalPnl >= 0 ? "text-gain" : "text-loss"
+              }`}
+            >
+              P&L: {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
+            </span>
+          </div>
         )}
       </div>
 
@@ -62,15 +71,43 @@ export default function PositionsPage() {
         </p>
       )}
 
+      {/* Summary badges */}
+      {positions.length > 0 && (
+        <div className="flex gap-3 mb-4">
+          <span className="text-xs px-2.5 py-1 rounded-full bg-accent-purple/15 text-accent-purple-light font-medium">
+            {positions.length} position{positions.length !== 1 ? "s" : ""}
+          </span>
+          {dayPositions.length > 0 && (
+            <span className="text-xs px-2.5 py-1 rounded-full bg-navy-700 text-text-secondary font-medium">
+              {dayPositions.length} day
+            </span>
+          )}
+          {swingPositions.length > 0 && (
+            <span className="text-xs px-2.5 py-1 rounded-full bg-navy-700 text-text-secondary font-medium">
+              {swingPositions.length} swing
+            </span>
+          )}
+        </div>
+      )}
+
+      <p className="text-[10px] text-text-secondary mb-3">
+        Prices update every ~15s from Alpaca latest trades during extended hours (4 AM – 8 PM ET).
+      </p>
+
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left border border-navy-600 bg-navy-900 rounded-lg">
           <thead className="bg-navy-800 text-text-secondary uppercase text-xs">
             <tr>
               <th className="px-4 py-3">Symbol</th>
-              <th className="px-4 py-3">Qty <Tip text="Number of shares you own of this stock." inline /></th>
-              <th className="px-4 py-3">Avg Entry Price <Tip text="The average price you paid per share when buying." inline /></th>
-              <th className="px-4 py-3">Current Price <Tip text="What the stock is worth right now per share." inline /></th>
-              <th className="px-4 py-3">Unrealized P&amp;L <Tip text="Profit or loss if you sold right now. Green means you're up, red means you're down. 'Unrealized' because you haven't sold yet." inline /></th>
+              <th className="px-4 py-3">Type</th>
+              <th className="px-4 py-3">Qty <Tip text="Number of shares held." inline /></th>
+              <th className="px-4 py-3">Avg Entry <Tip text="Average price paid per share." inline /></th>
+              <th className="px-4 py-3">Last Price <Tip text="Price at last fill — not a live quote." inline /></th>
+              <th className="px-4 py-3">Market Value <Tip text="Current shares × last known price." inline /></th>
+              <th className="px-4 py-3">P&L <Tip text="Unrealized profit or loss based on last fill price." inline /></th>
+              <th className="px-4 py-3">P&L % <Tip text="Percentage gain or loss from entry price." inline /></th>
+              <th className="px-4 py-3">Stop Loss <Tip text="Auto-sell trigger if price drops to this level." inline /></th>
+              <th className="px-4 py-3">Take Profit <Tip text="Auto-sell trigger if price rises to this level." inline /></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-navy-600">
@@ -78,27 +115,100 @@ export default function PositionsPage() {
               <tr>
                 <td
                   className="px-4 py-8 text-center text-text-secondary"
-                  colSpan={5}
+                  colSpan={10}
                 >
                   No open positions
                 </td>
               </tr>
             ) : (
-              positions.map((p) => (
-                <tr key={p.symbol}>
-                  <td className="px-4 py-3 font-medium text-text-primary">{p.symbol}</td>
-                  <td className="px-4 py-3 text-text-secondary">{p.qty}</td>
-                  <td className="px-4 py-3 text-text-secondary">${p.avg_entry_price.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-text-secondary">${p.current_price.toFixed(2)}</td>
-                  <td
-                    className={`px-4 py-3 font-medium ${
-                      p.unrealized_pnl >= 0 ? "text-gain" : "text-loss"
-                    }`}
-                  >
-                    ${p.unrealized_pnl.toFixed(2)}
-                  </td>
-                </tr>
-              ))
+              positions.map((p) => {
+                const marketValue = p.current_price * p.qty;
+                const pnlPct =
+                  p.avg_entry_price > 0
+                    ? ((p.current_price - p.avg_entry_price) / p.avg_entry_price) * 100
+                    : 0;
+                const isPositive = p.unrealized_pnl >= 0;
+                const pnlColor = isPositive ? "text-gain" : "text-loss";
+                const tradeType = p.trade_type || "day";
+
+                // Distance to stop/take as percentage from current
+                const stopDist =
+                  p.stop_loss_price != null && p.current_price > 0
+                    ? ((p.stop_loss_price - p.current_price) / p.current_price) * 100
+                    : null;
+                const takeDist =
+                  p.take_profit_price != null && p.current_price > 0
+                    ? ((p.take_profit_price - p.current_price) / p.current_price) * 100
+                    : null;
+
+                return (
+                  <tr key={p.symbol} className="hover:bg-navy-700 transition-colors">
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/quote/${p.symbol}`}
+                        className="font-semibold text-text-primary hover:text-accent-purple-light transition-colors"
+                      >
+                        {p.symbol}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${
+                          tradeType === "swing"
+                            ? "bg-accent-purple/15 text-accent-purple-light"
+                            : "bg-navy-700 text-text-secondary"
+                        }`}
+                      >
+                        {tradeType}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-text-primary tabular-nums">{p.qty}</td>
+                    <td className="px-4 py-3 text-text-secondary tabular-nums">
+                      ${p.avg_entry_price.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-text-primary tabular-nums">
+                      ${p.current_price.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-text-primary tabular-nums">
+                      ${marketValue.toFixed(2)}
+                    </td>
+                    <td className={`px-4 py-3 font-medium tabular-nums ${pnlColor}`}>
+                      {isPositive ? "+" : ""}${p.unrealized_pnl.toFixed(2)}
+                    </td>
+                    <td className={`px-4 py-3 font-medium tabular-nums ${pnlColor}`}>
+                      {isPositive ? "+" : ""}{pnlPct.toFixed(2)}%
+                    </td>
+                    <td className="px-4 py-3 tabular-nums">
+                      {p.stop_loss_price != null ? (
+                        <div>
+                          <span className="text-text-primary">${p.stop_loss_price.toFixed(2)}</span>
+                          {stopDist != null && (
+                            <span className="text-[10px] text-text-secondary ml-1">
+                              ({stopDist > 0 ? "+" : ""}{stopDist.toFixed(1)}%)
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-text-secondary">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums">
+                      {p.take_profit_price != null ? (
+                        <div>
+                          <span className="text-text-primary">${p.take_profit_price.toFixed(2)}</span>
+                          {takeDist != null && (
+                            <span className="text-[10px] text-text-secondary ml-1">
+                              (+{takeDist.toFixed(1)}%)
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-text-secondary">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

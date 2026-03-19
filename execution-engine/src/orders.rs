@@ -1,9 +1,33 @@
 use tracing::{error, info};
 
 use crate::alpaca::{AlpacaClient, AlpacaError};
-use crate::models::AlpacaOrder;
+use crate::models::{AlpacaOrder, AlpacaPosition};
 
 impl AlpacaClient {
+    /// Fetch all open positions from Alpaca.
+    pub async fn get_positions(&self) -> Result<Vec<AlpacaPosition>, AlpacaError> {
+        let url = format!("{}/v2/positions", self.config.base_url());
+
+        let resp = self
+            .http
+            .get(&url)
+            .header("APCA-API-KEY-ID", &self.config.api_key)
+            .header("APCA-API-SECRET-KEY", &self.config.secret_key)
+            .send()
+            .await
+            .map_err(AlpacaError::Network)?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(AlpacaError::Api { status: status.as_u16(), body });
+        }
+
+        resp.json::<Vec<AlpacaPosition>>()
+            .await
+            .map_err(AlpacaError::Deserialize)
+    }
+
     /// Submit a market order to Alpaca. Returns the Alpaca order response.
     pub async fn submit_market_order(
         &self,
@@ -100,6 +124,48 @@ impl AlpacaClient {
             }
         }
         Ok(bars)
+    }
+
+    /// Fetch latest trade prices for multiple symbols in a single API call.
+    /// Returns a map of symbol → latest trade price.
+    pub async fn get_latest_trades(
+        &self,
+        symbols: &[String],
+    ) -> Result<std::collections::HashMap<String, f64>, AlpacaError> {
+        if symbols.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let symbols_param = symbols.join(",");
+        let url = format!(
+            "https://data.alpaca.markets/v2/stocks/trades/latest?symbols={}&feed=iex",
+            symbols_param
+        );
+
+        let resp = self
+            .http
+            .get(&url)
+            .header("APCA-API-KEY-ID", &self.config.api_key)
+            .header("APCA-API-SECRET-KEY", &self.config.secret_key)
+            .send()
+            .await
+            .map_err(AlpacaError::Network)?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(AlpacaError::Api { status: status.as_u16(), body });
+        }
+
+        let data: serde_json::Value = resp.json().await.map_err(AlpacaError::Deserialize)?;
+        let mut prices = std::collections::HashMap::new();
+        if let Some(trades) = data.get("trades").and_then(|t| t.as_object()) {
+            for (sym, trade) in trades {
+                if let Some(price) = trade.get("p").and_then(|p| p.as_f64()) {
+                    prices.insert(sym.clone(), price);
+                }
+            }
+        }
+        Ok(prices)
     }
 
     /// Fetch a single order by Alpaca ID to check fill status.

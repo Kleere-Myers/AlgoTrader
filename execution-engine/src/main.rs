@@ -108,7 +108,7 @@ async fn main() {
 
     let equity: f64 = account.equity.parse().unwrap_or(0.0);
 
-    // 5. Load positions from DuckDB
+    // 5. Load positions from DuckDB, then sync with Alpaca
     let mut position_tracker = PositionTracker::new();
     if let Ok(con) = db::connect() {
         match db::load_positions(&con) {
@@ -120,8 +120,34 @@ async fn main() {
         }
     }
 
+    // Sync with Alpaca's actual holdings to fix any qty/price drift
+    match alpaca.get_positions().await {
+        Ok(alpaca_positions) => {
+            let changed = position_tracker.sync_with_alpaca(&alpaca_positions);
+            if !changed.is_empty() {
+                info!(changed = ?changed, "Synced positions with Alpaca");
+                // Persist synced state to DuckDB
+                if let Ok(con) = db::connect() {
+                    for sym in &changed {
+                        if let Some(pos) = position_tracker.get(sym) {
+                            let _ = db::upsert_position(&con, pos);
+                        } else {
+                            let _ = db::delete_position(&con, sym);
+                        }
+                    }
+                }
+            }
+            info!(
+                local = position_tracker.count(),
+                alpaca = alpaca_positions.len(),
+                "Position sync complete"
+            );
+        }
+        Err(e) => warn!("Failed to fetch Alpaca positions for sync: {e}"),
+    }
+
     let strategy_engine_url = std::env::var("STRATEGY_ENGINE_URL")
-        .unwrap_or_else(|_| "http://localhost:8000".into());
+        .unwrap_or_else(|_| "http://localhost:9100".into());
 
     let symbols = load_symbols();
     info!(symbols = ?symbols, "Loaded symbol list");
@@ -163,9 +189,15 @@ async fn main() {
         scheduler::swing_stop_check_loop(stop_state).await;
     });
 
+    // 8d. Spawn quote refresh loop (updates position prices every 15s)
+    let quote_state = state.clone();
+    tokio::spawn(async move {
+        scheduler::quote_refresh_loop(quote_state).await;
+    });
+
     // 9. Build Axum router
     let cors = CorsLayer::new()
-        .allow_origin("http://localhost:3000".parse::<axum::http::HeaderValue>().unwrap())
+        .allow_origin("http://localhost:9102".parse::<axum::http::HeaderValue>().unwrap())
         .allow_methods(Any)
         .allow_headers(Any);
 
@@ -185,7 +217,7 @@ async fn main() {
         .with_state(state);
 
     // 10. Start server
-    let addr = "0.0.0.0:8080";
+    let addr = "0.0.0.0:9101";
     info!("execution-engine listening on {addr}");
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
@@ -855,7 +887,7 @@ mod risk_config_tests {
             trading_halted: Mutex::new(false),
             daily_pnl: Mutex::new(0.0),
             account_equity: Mutex::new(100_000.0),
-            strategy_engine_url: "http://localhost:8000".into(),
+            strategy_engine_url: "http://localhost:9100".into(),
             symbols: vec!["SPY".into(), "QQQ".into(), "AAPL".into(), "MSFT".into(), "NVDA".into(), "GOOGL".into()],
         })
     }

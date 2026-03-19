@@ -144,6 +144,8 @@ Use triangle SVG icons for gain/loss instead of sparkline charts:
 | `app/globals.css` | CSS variables, scrollbar, input, recharts tooltip |
 | `app/layout.tsx` | Root layout with Navbar, body bg |
 | `components/Navbar.tsx` | Top navigation bar |
+| `app/quote/[symbol]/page.tsx` | Yahoo Finance-style quote detail page |
+| `components/WatchlistTable.tsx` | Compact watchlist table (overview page) |
 
 ## Rules
 

@@ -118,6 +118,17 @@ pub struct AlpacaOrder {
     pub qty: String,
 }
 
+/// Alpaca position returned by GET /v2/positions.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AlpacaPosition {
+    pub symbol: String,
+    pub qty: String,
+    pub avg_entry_price: String,
+    pub current_price: String,
+    pub unrealized_pl: String,
+    pub side: String,
+}
+
 /// SSE event types broadcast to the dashboard.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]

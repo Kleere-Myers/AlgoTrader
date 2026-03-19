@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { CompanyInfo, NewsArticle } from "@/types";
 
 function formatMarketCap(cap: number | null): string {
@@ -54,7 +55,7 @@ export default function WatchlistCard({ symbol, company, news }: WatchlistCardPr
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <div>
-          <span className="font-bold text-base text-text-primary">{symbol}</span>
+          <Link href={`/quote/${symbol}`} className="font-bold text-base text-text-primary hover:text-accent-purple-light transition-colors">{symbol}</Link>
           {company?.name && company.name !== symbol && (
             <span className="text-xs text-text-secondary ml-2">{company.name}</span>
           )}

@@ -93,7 +93,7 @@ app = FastAPI(title="AlgoTrader Strategy Engine", version="0.1.0", lifespan=life
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:9102"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -193,6 +193,59 @@ def get_bars(symbol: str, limit: int = 100):
         }
         for r in reversed(bars)
     ]
+
+
+_history_cache: dict[str, tuple[float, list]] = {}
+_HISTORY_CACHE_TTL = 300  # 5 minutes
+
+_HISTORY_RANGES = {
+    "1d":  {"period": "1d",  "interval": "5m"},
+    "5d":  {"period": "5d",  "interval": "15m"},
+    "1m":  {"period": "1mo", "interval": "1d"},
+    "6m":  {"period": "6mo", "interval": "1d"},
+    "1y":  {"period": "1y",  "interval": "1d"},
+    "5y":  {"period": "5y",  "interval": "1wk"},
+}
+
+
+@app.get("/bars/{symbol}/history")
+def get_historical_bars(symbol: str, range: str = "1d"):
+    """Return historical OHLCV bars from yfinance for charting."""
+    symbol = symbol.upper()
+    if range not in _HISTORY_RANGES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid range '{range}'. Must be one of: {', '.join(_HISTORY_RANGES)}",
+        )
+
+    now = _time.time()
+    cache_key = f"{symbol}:{range}"
+    if cache_key in _history_cache:
+        cached_at, data = _history_cache[cache_key]
+        if now - cached_at < _HISTORY_CACHE_TTL:
+            return data
+
+    try:
+        import yfinance as yf
+        params = _HISTORY_RANGES[range]
+        df = yf.Ticker(symbol).history(period=params["period"], interval=params["interval"])
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"yfinance history failed: {exc}")
+
+    bars = [
+        {
+            "timestamp": str(idx),
+            "open": round(float(row["Open"]), 4),
+            "high": round(float(row["High"]), 4),
+            "low": round(float(row["Low"]), 4),
+            "close": round(float(row["Close"]), 4),
+            "volume": int(row["Volume"]),
+        }
+        for idx, row in df.iterrows()
+    ]
+
+    _history_cache[cache_key] = (now, bars)
+    return bars
 
 
 @app.get("/strategies")
@@ -445,6 +498,25 @@ def get_company_info(symbol: str):
         "fifty_two_week_high": raw.get("fiftyTwoWeekHigh"),
         "fifty_two_week_low": raw.get("fiftyTwoWeekLow"),
         "average_volume": raw.get("averageVolume"),
+        # Extended quote fields
+        "trailing_pe": raw.get("trailingPE"),
+        "forward_pe": raw.get("forwardPE"),
+        "eps": raw.get("trailingEps"),
+        "beta": raw.get("beta"),
+        "dividend_rate": raw.get("dividendRate"),
+        "dividend_yield": raw.get("dividendYield"),
+        "payout_ratio": raw.get("payoutRatio"),
+        "open": raw.get("open") or raw.get("regularMarketOpen"),
+        "day_high": raw.get("dayHigh") or raw.get("regularMarketDayHigh"),
+        "day_low": raw.get("dayLow") or raw.get("regularMarketDayLow"),
+        "volume": raw.get("volume") or raw.get("regularMarketVolume"),
+        "bid": raw.get("bid"),
+        "ask": raw.get("ask"),
+        "bid_size": raw.get("bidSize"),
+        "ask_size": raw.get("askSize"),
+        "target_mean_price": raw.get("targetMeanPrice"),
+        "exchange": raw.get("exchange"),
+        "currency": raw.get("currency"),
     }
 
     _company_cache[symbol] = (now, result)
@@ -638,7 +710,7 @@ def get_pnl_history(range: str = "1d"):
     try:
         # Get account info from execution engine
         import httpx
-        exec_url = os.environ.get("EXECUTION_ENGINE_URL", "http://localhost:8080")
+        exec_url = os.environ.get("EXECUTION_ENGINE_URL", "http://localhost:9101")
         try:
             resp = httpx.get(f"{exec_url}/account", timeout=5)
             acct = resp.json() if resp.status_code == 200 else {}

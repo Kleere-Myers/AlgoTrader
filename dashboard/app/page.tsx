@@ -10,9 +10,11 @@ import type {
   MarketMover,
   PortfolioPnlHistory,
   NewsArticle,
+  CompanyInfo,
 } from "@/types";
 import MarketIndexCard from "@/components/MarketIndexCard";
 import SectorPerformanceBar from "@/components/SectorPerformanceBar";
+import WatchlistTable from "@/components/WatchlistTable";
 import PnlChart from "@/components/PnlChart";
 import PortfolioSummary from "@/components/PortfolioSummary";
 import MoversList from "@/components/MoversList";
@@ -22,6 +24,8 @@ export default function OverviewPage() {
   const [indices, setIndices] = useState<MarketIndex[]>([]);
   const [sectors, setSectors] = useState<SectorPerformance[]>([]);
   const [movers, setMovers] = useState<{ gainers: MarketMover[]; losers: MarketMover[] }>({ gainers: [], losers: [] });
+  const [watchlist, setWatchlist] = useState<CompanyInfo[]>([]);
+  const [watchlistLoading, setWatchlistLoading] = useState(true);
   const [pnlRange, setPnlRange] = useState("1d");
   const [pnlData, setPnlData] = useState<PortfolioPnlHistory | null>(null);
   const [news, setNews] = useState<NewsArticle[]>([]);
@@ -47,6 +51,27 @@ export default function OverviewPage() {
     };
     load();
     const interval = setInterval(load, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch watchlist symbols with company info
+  useEffect(() => {
+    const loadWatchlist = async () => {
+      try {
+        const { symbols } = await strategyApi.getSymbols();
+        const infos = await Promise.allSettled(
+          symbols.map((s) => strategyApi.getCompanyInfo(s))
+        );
+        setWatchlist(
+          infos
+            .filter((r): r is PromiseFulfilledResult<CompanyInfo> => r.status === "fulfilled")
+            .map((r) => r.value)
+        );
+      } catch {}
+      setWatchlistLoading(false);
+    };
+    loadWatchlist();
+    const interval = setInterval(loadWatchlist, 60_000);
     return () => clearInterval(interval);
   }, []);
 
@@ -92,13 +117,21 @@ export default function OverviewPage() {
         </div>
       </section>
 
-      {/* Sector Performance */}
-      {sectors.length > 0 && (
-        <section className="mb-6">
-          <h2 className="text-lg font-semibold text-text-secondary mb-3">Sector Performance</h2>
-          <SectorPerformanceBar sectors={sectors} />
-        </section>
-      )}
+      {/* Sectors + Watchlist */}
+      <section className="mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {sectors.length > 0 && (
+            <div>
+              <h2 className="text-sm font-semibold text-text-secondary mb-2">Sectors</h2>
+              <SectorPerformanceBar sectors={sectors} />
+            </div>
+          )}
+          <div>
+            <h2 className="text-sm font-semibold text-text-secondary mb-2">Watchlist</h2>
+            <WatchlistTable symbols={watchlist} loading={watchlistLoading} />
+          </div>
+        </div>
+      </section>
 
       {/* Portfolio P&L + Summary */}
       <section className="mb-6">

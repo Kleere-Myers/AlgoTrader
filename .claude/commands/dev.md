@@ -15,16 +15,16 @@ Examples:
 
 Strategy Engine (Python FastAPI):
   - Directory: strategy-engine/
-  - Start: cd /home/mmyers/Projects/AlgoTrader && set -a && source .env && set +a && cd strategy-engine && .venv/bin/uvicorn main:app --port 8000 > /tmp/strategy-engine.log 2>&1 &
-  - Port: 8000
-  - Process pattern: "uvicorn main:app --port 8000"
+  - Start: cd /home/mmyers/Projects/AlgoTrader && set -a && source .env && set +a && cd strategy-engine && .venv/bin/uvicorn main:app --port 9100 > /tmp/strategy-engine.log 2>&1 &
+  - Port: 9100
+  - Process pattern: "uvicorn main:app --port 9100"
   - Log file: /tmp/strategy-engine.log
   - NOTE: Must source .env before starting so Alpaca API keys are available for news/market endpoints
 
 Execution Engine (Rust Axum):
   - Directory: execution-engine/
   - Start: cd execution-engine && /home/mmyers/.cargo/bin/cargo run > /tmp/execution-engine.log 2>&1 &
-  - Port: 8080
+  - Port: 9101
   - Process pattern: "target/debug/execution-engine"
   - Log file: /tmp/execution-engine.log
 
@@ -34,8 +34,8 @@ Post-start hooks (after BOTH strategy + execution engines are up):
 Dashboard (Next.js):
   - Directory: dashboard/
   - Start: cd /home/mmyers/Projects/AlgoTrader/dashboard && npm run dev > /tmp/dashboard.log 2>&1 &
-  - Port: 3000
-  - Process pattern: "next dev --port 3000"
+  - Port: 9102
+  - Process pattern: "next dev --port 9102"
   - Log file: /tmp/dashboard.log
 
 ## Behavior
@@ -57,7 +57,7 @@ Always report results clearly, one line per service.
 **Post-start/restart hook:**
 After the execution engine starts, re-apply the user's preferred risk settings by running:
 ```
-curl -s -X PATCH http://localhost:8080/risk/config \
+curl -s -X PATCH http://localhost:9101/risk/config \
   -H "Content-Type: application/json" \
   -d '{"max_daily_loss_pct": 0.05, "max_position_size_pct": 0.20, "max_open_positions": 8, "min_signal_confidence": 0.50, "order_throttle_secs": 120}'
 ```

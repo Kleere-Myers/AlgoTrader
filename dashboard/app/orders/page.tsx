@@ -6,7 +6,7 @@ import { executionApi } from "@/lib/api";
 import Tip from "@/components/Tip";
 
 function formatTime(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "\u2014";
   const d = new Date(iso);
   return d.toLocaleString("en-US", {
     month: "short",
@@ -21,15 +21,15 @@ function formatTime(iso: string | null): string {
 function statusBadge(status: string) {
   const s = status.toLowerCase();
   const styles: Record<string, string> = {
-    filled: "bg-green-100 text-green-700",
-    pending: "bg-yellow-100 text-yellow-700",
-    new: "bg-yellow-100 text-yellow-700",
-    partially_filled: "bg-yellow-100 text-yellow-700",
-    cancelled: "bg-gray-100 text-gray-500",
-    canceled: "bg-gray-100 text-gray-500",
-    rejected: "bg-red-100 text-red-700",
+    filled: "bg-gain/15 text-gain",
+    pending: "bg-yellow-500/15 text-yellow-500",
+    new: "bg-yellow-500/15 text-yellow-500",
+    partially_filled: "bg-yellow-500/15 text-yellow-500",
+    cancelled: "bg-navy-600 text-text-secondary",
+    canceled: "bg-navy-600 text-text-secondary",
+    rejected: "bg-loss/15 text-loss",
   };
-  const style = styles[s] || "bg-gray-100 text-gray-500";
+  const style = styles[s] || "bg-navy-600 text-text-secondary";
   return (
     <span className={`text-xs px-2 py-0.5 rounded font-medium ${style}`}>
       {status}
@@ -62,28 +62,28 @@ export default function OrdersPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold">Orders</h2>
-          <p className="text-gray-500 text-sm mt-1">
+          <h2 className="text-2xl font-bold text-text-primary">Orders</h2>
+          <p className="text-text-secondary text-sm mt-1">
             Recent order history with fill prices, status, and strategy attribution.
           </p>
         </div>
         <button
           onClick={fetchOrders}
-          className="text-xs px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50 text-gray-600"
+          className="text-xs px-3 py-1.5 rounded border border-navy-600 hover:bg-navy-700 text-text-secondary"
         >
           Refresh
         </button>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 text-sm mb-4">
+        <div className="rounded-lg border border-loss/30 bg-loss/10 p-4 text-loss text-sm mb-4">
           {error}
         </div>
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left border border-gray-200 bg-white rounded-lg">
-          <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
+        <table className="w-full text-sm text-left border border-navy-600 bg-navy-900 rounded-lg">
+          <thead className="bg-navy-800 text-text-secondary uppercase text-xs">
             <tr>
               <th className="px-4 py-3">Symbol</th>
               <th className="px-4 py-3">Side <Tip text="BUY means shares were purchased. SELL means shares were sold." inline /></th>
@@ -95,40 +95,40 @@ export default function OrdersPage() {
               <th className="px-4 py-3">Filled</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-navy-600">
             {loading ? (
               <tr>
-                <td className="px-4 py-8 text-center text-gray-400" colSpan={8}>
+                <td className="px-4 py-8 text-center text-text-secondary" colSpan={8}>
                   Loading orders...
                 </td>
               </tr>
             ) : orders.length === 0 ? (
               <tr>
-                <td className="px-4 py-8 text-center text-gray-400" colSpan={8}>
+                <td className="px-4 py-8 text-center text-text-secondary" colSpan={8}>
                   No orders yet
                 </td>
               </tr>
             ) : (
               orders.map((o) => (
-                <tr key={o.order_id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2.5 font-medium">{o.symbol}</td>
+                <tr key={o.order_id} className="hover:bg-navy-800">
+                  <td className="px-4 py-2.5 font-medium text-text-primary">{o.symbol}</td>
                   <td className="px-4 py-2.5">
                     <span
                       className={`font-medium ${
-                        o.side === "buy" ? "text-green-600" : "text-red-600"
+                        o.side === "buy" ? "text-gain" : "text-loss"
                       }`}
                     >
                       {o.side.toUpperCase()}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-right">{o.qty}</td>
-                  <td className="px-4 py-2.5 text-right">
-                    {o.filled_price !== null ? `$${o.filled_price.toFixed(2)}` : "—"}
+                  <td className="px-4 py-2.5 text-right text-text-secondary">{o.qty}</td>
+                  <td className="px-4 py-2.5 text-right text-text-secondary">
+                    {o.filled_price !== null ? `$${o.filled_price.toFixed(2)}` : "\u2014"}
                   </td>
                   <td className="px-4 py-2.5">{statusBadge(o.status)}</td>
-                  <td className="px-4 py-2.5 text-gray-500">{o.strategy_name}</td>
-                  <td className="px-4 py-2.5 text-gray-500 text-xs">{formatTime(o.submitted_at)}</td>
-                  <td className="px-4 py-2.5 text-gray-500 text-xs">{formatTime(o.filled_at)}</td>
+                  <td className="px-4 py-2.5 text-text-secondary">{o.strategy_name}</td>
+                  <td className="px-4 py-2.5 text-text-secondary text-xs">{formatTime(o.submitted_at)}</td>
+                  <td className="px-4 py-2.5 text-text-secondary text-xs">{formatTime(o.filled_at)}</td>
                 </tr>
               ))
             )}

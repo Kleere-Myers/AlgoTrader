@@ -44,11 +44,11 @@ export default function PositionsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold">Positions</h2>
+        <h2 className="text-2xl font-bold text-text-primary">Positions</h2>
         {positions.length > 0 && (
           <span
             className={`text-lg font-semibold ${
-              totalPnl >= 0 ? "text-green-600" : "text-red-600"
+              totalPnl >= 0 ? "text-gain" : "text-loss"
             }`}
           >
             Total P&amp;L: ${totalPnl.toFixed(2)}
@@ -57,14 +57,14 @@ export default function PositionsPage() {
       </div>
 
       {error && (
-        <p className="text-red-500 text-sm mb-4">
+        <p className="text-loss text-sm mb-4">
           Failed to load: {error} — is the execution engine running?
         </p>
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left border border-gray-200 bg-white rounded-lg">
-          <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
+        <table className="w-full text-sm text-left border border-navy-600 bg-navy-900 rounded-lg">
+          <thead className="bg-navy-800 text-text-secondary uppercase text-xs">
             <tr>
               <th className="px-4 py-3">Symbol</th>
               <th className="px-4 py-3">Qty <Tip text="Number of shares you own of this stock." inline /></th>
@@ -73,11 +73,11 @@ export default function PositionsPage() {
               <th className="px-4 py-3">Unrealized P&amp;L <Tip text="Profit or loss if you sold right now. Green means you're up, red means you're down. 'Unrealized' because you haven't sold yet." inline /></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-navy-600">
             {positions.length === 0 ? (
               <tr>
                 <td
-                  className="px-4 py-8 text-center text-gray-400"
+                  className="px-4 py-8 text-center text-text-secondary"
                   colSpan={5}
                 >
                   No open positions
@@ -86,13 +86,13 @@ export default function PositionsPage() {
             ) : (
               positions.map((p) => (
                 <tr key={p.symbol}>
-                  <td className="px-4 py-3 font-medium">{p.symbol}</td>
-                  <td className="px-4 py-3">{p.qty}</td>
-                  <td className="px-4 py-3">${p.avg_entry_price.toFixed(2)}</td>
-                  <td className="px-4 py-3">${p.current_price.toFixed(2)}</td>
+                  <td className="px-4 py-3 font-medium text-text-primary">{p.symbol}</td>
+                  <td className="px-4 py-3 text-text-secondary">{p.qty}</td>
+                  <td className="px-4 py-3 text-text-secondary">${p.avg_entry_price.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-text-secondary">${p.current_price.toFixed(2)}</td>
                   <td
                     className={`px-4 py-3 font-medium ${
-                      p.unrealized_pnl >= 0 ? "text-green-600" : "text-red-600"
+                      p.unrealized_pnl >= 0 ? "text-gain" : "text-loss"
                     }`}
                   >
                     ${p.unrealized_pnl.toFixed(2)}

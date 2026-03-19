@@ -61,22 +61,22 @@ export default function WatchlistPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold">Watchlist</h2>
-          <p className="text-gray-500 text-sm">
+          <h2 className="text-2xl font-bold text-text-primary">Watchlist</h2>
+          <p className="text-text-secondary text-sm">
             {symbols.length} symbols tracked — auto-refreshes every 60s
           </p>
         </div>
         <button
           onClick={() => fetchAll(symbols)}
           disabled={loading}
-          className="text-sm px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+          className="text-sm px-4 py-2 rounded bg-accent-purple text-white hover:bg-accent-purple-dark disabled:opacity-50"
         >
           {loading ? "Loading..." : "Refresh"}
         </button>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 mb-4">
+        <div className="bg-loss/10 border border-loss/30 rounded-lg p-3 text-sm text-loss mb-4">
           {error}
         </div>
       )}
@@ -84,11 +84,11 @@ export default function WatchlistPage() {
       {loading && Object.keys(companies).length === 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {symbols.map((s) => (
-            <div key={s} className="rounded-lg border border-gray-200 bg-white p-4 h-48 animate-pulse">
-              <div className="h-4 w-16 bg-gray-200 rounded mb-3" />
-              <div className="h-3 w-32 bg-gray-100 rounded mb-2" />
-              <div className="h-3 w-24 bg-gray-100 rounded mb-2" />
-              <div className="h-3 w-40 bg-gray-100 rounded" />
+            <div key={s} className="rounded-lg border border-navy-600 bg-navy-900 p-4 h-48 animate-pulse">
+              <div className="h-4 w-16 bg-navy-600 rounded mb-3" />
+              <div className="h-3 w-32 bg-navy-800 rounded mb-2" />
+              <div className="h-3 w-24 bg-navy-800 rounded mb-2" />
+              <div className="h-3 w-40 bg-navy-800 rounded" />
             </div>
           ))}
         </div>

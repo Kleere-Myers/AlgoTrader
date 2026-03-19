@@ -463,3 +463,285 @@ def get_news(symbol: str):
     scored = _score_articles(articles)
 
     return {"symbol": symbol, "articles": scored}
+
+
+# ---------------------------------------------------------------------------
+# Market data endpoints (for dashboard Overview)
+# ---------------------------------------------------------------------------
+
+_market_cache: dict[str, tuple[float, Any]] = {}
+_MARKET_CACHE_TTL = 60  # 1 minute
+
+
+def _cached_market(key: str, ttl: int = _MARKET_CACHE_TTL):
+    """Check market cache. Returns (hit, data)."""
+    now = _time.time()
+    if key in _market_cache:
+        cached_at, data = _market_cache[key]
+        if now - cached_at < ttl:
+            return True, data
+    return False, None
+
+
+@app.get("/market/indices")
+def get_market_indices():
+    """Return market summary data matching Yahoo Finance layout — indices, VIX, bonds, commodities, crypto."""
+    hit, data = _cached_market("indices")
+    if hit:
+        return data
+
+    import yfinance as yf
+
+    markets = [
+        ("^GSPC", "S&P 500"),
+        ("^DJI", "Dow 30"),
+        ("^IXIC", "Nasdaq"),
+        ("^RUT", "Russell 2000"),
+        ("^VIX", "VIX"),
+        ("^TNX", "10-Yr Bond"),
+        ("GC=F", "Gold"),
+        ("CL=F", "Crude Oil"),
+        ("BTC-USD", "Bitcoin"),
+        ("EURUSD=X", "EUR/USD"),
+    ]
+    result = []
+    for symbol, name in markets:
+        try:
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(period="1d", interval="5m")
+            info = ticker.info or {}
+
+            prev_close = info.get("previousClose") or info.get("regularMarketPreviousClose") or 0
+            current = info.get("currentPrice") or info.get("regularMarketPrice") or 0
+            if not current and not hist.empty:
+                current = float(hist["Close"].iloc[-1])
+
+            change_abs = current - prev_close if prev_close else 0
+            change_pct = (change_abs / prev_close * 100) if prev_close else 0
+
+            # Downsample intraday to ~30 points for compact sparklines
+            intraday = []
+            if not hist.empty:
+                step = max(1, len(hist) // 30)
+                for i in range(0, len(hist), step):
+                    row = hist.iloc[i]
+                    intraday.append({"value": round(float(row["Close"]), 4)})
+
+            result.append({
+                "symbol": symbol,
+                "name": name,
+                "current_price": round(current, 4) if "USD" in symbol or symbol == "^TNX" else round(current, 2),
+                "previous_close": round(prev_close, 4) if "USD" in symbol or symbol == "^TNX" else round(prev_close, 2),
+                "change_abs": round(change_abs, 2),
+                "change_pct": round(change_pct, 2),
+                "intraday_prices": intraday,
+            })
+        except Exception as exc:
+            logger.warning("Failed to fetch market data for %s: %s", symbol, exc)
+            result.append({
+                "symbol": symbol, "name": name,
+                "current_price": 0, "previous_close": 0,
+                "change_abs": 0, "change_pct": 0, "intraday_prices": [],
+            })
+
+    _market_cache["indices"] = (_time.time(), result)
+    return result
+
+
+@app.get("/market/sectors")
+def get_market_sectors():
+    """Return sector ETF daily performance."""
+    hit, data = _cached_market("sectors", ttl=300)
+    if hit:
+        return data
+
+    import yfinance as yf
+
+    sector_map = [
+        ("XLK", "Technology"), ("XLF", "Financials"), ("XLE", "Energy"),
+        ("XLV", "Healthcare"), ("XLY", "Consumer Disc"), ("XLP", "Consumer Staples"),
+        ("XLI", "Industrials"), ("XLB", "Materials"), ("XLRE", "Real Estate"),
+        ("XLU", "Utilities"), ("XLC", "Communication"),
+    ]
+    symbols = [s for s, _ in sector_map]
+    result = []
+
+    try:
+        tickers = yf.Tickers(" ".join(symbols))
+        for symbol, sector in sector_map:
+            try:
+                info = tickers.tickers[symbol].info or {}
+                prev = info.get("previousClose") or info.get("regularMarketPreviousClose") or 0
+                curr = info.get("currentPrice") or info.get("regularMarketPrice") or 0
+                change_pct = ((curr - prev) / prev * 100) if prev else 0
+                result.append({"sector": sector, "symbol": symbol, "change_pct": round(change_pct, 2)})
+            except Exception:
+                result.append({"sector": sector, "symbol": symbol, "change_pct": 0.0})
+    except Exception as exc:
+        logger.warning("Failed to fetch sector data: %s", exc)
+
+    result.sort(key=lambda x: x["change_pct"], reverse=True)
+    _market_cache["sectors"] = (_time.time(), result)
+    return result
+
+
+@app.get("/market/movers")
+def get_market_movers():
+    """Return top gainers and losers from tracked symbols."""
+    hit, data = _cached_market("movers")
+    if hit:
+        return data
+
+    movers = []
+    for symbol in SYMBOLS:
+        now = _time.time()
+        if symbol in _company_cache:
+            cached_at, info = _company_cache[symbol]
+            if now - cached_at < _COMPANY_CACHE_TTL:
+                movers.append({
+                    "symbol": symbol,
+                    "name": info.get("name", symbol),
+                    "current_price": info.get("current_price"),
+                    "change_pct": info.get("change_pct", 0) or 0,
+                })
+                continue
+
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(symbol)
+            raw = ticker.info or {}
+            prev = raw.get("previousClose") or raw.get("regularMarketPreviousClose") or 0
+            curr = raw.get("currentPrice") or raw.get("regularMarketPrice") or 0
+            pct = ((curr - prev) / prev * 100) if prev else 0
+            movers.append({
+                "symbol": symbol,
+                "name": raw.get("shortName") or symbol,
+                "current_price": round(curr, 2) if curr else None,
+                "change_pct": round(pct, 2),
+            })
+        except Exception:
+            movers.append({"symbol": symbol, "name": symbol, "current_price": None, "change_pct": 0})
+
+    sorted_movers = sorted(movers, key=lambda x: x["change_pct"], reverse=True)
+    gainers = [m for m in sorted_movers if m["change_pct"] > 0]
+    losers = list(reversed([m for m in sorted_movers if m["change_pct"] <= 0]))
+
+    result = {"gainers": gainers, "losers": losers}
+    _market_cache["movers"] = (_time.time(), result)
+    return result
+
+
+@app.get("/portfolio/pnl-history")
+def get_pnl_history(range: str = "1d"):
+    """Return portfolio P&L time series and summary for the given range."""
+    con = _get_db()
+    try:
+        # Get account info from execution engine
+        import httpx
+        exec_url = os.environ.get("EXECUTION_ENGINE_URL", "http://localhost:8080")
+        try:
+            resp = httpx.get(f"{exec_url}/account", timeout=5)
+            acct = resp.json() if resp.status_code == 200 else {}
+        except Exception:
+            acct = {}
+
+        # Get positions
+        try:
+            resp = httpx.get(f"{exec_url}/positions", timeout=5)
+            positions = resp.json() if resp.status_code == 200 else []
+        except Exception:
+            positions = []
+
+        equity = acct.get("equity", 0)
+        buying_power = acct.get("buying_power", 0)
+        cash = acct.get("cash", 0)
+
+        day_positions = sum(1 for p in positions if p.get("trade_type", "day") == "day")
+        swing_positions = sum(1 for p in positions if p.get("trade_type") == "swing")
+
+        # Compute P&L history from daily_pnl table
+        range_map = {
+            "1d": "1 day", "1w": "7 days", "1m": "30 days",
+            "3m": "90 days", "ytd": "365 days",
+        }
+        interval = range_map.get(range, "1 day")
+        rows = con.execute(
+            f"SELECT date, realized_pnl, unrealized_pnl, account_equity "
+            f"FROM daily_pnl WHERE date >= current_date - INTERVAL '{interval}' "
+            f"ORDER BY date",
+        ).fetchall()
+
+        timestamps = [str(r[0]) for r in rows]
+        equity_series = [float(r[3]) if r[3] else 0 for r in rows]
+        pnl_series = [float(r[1]) + float(r[2]) for r in rows]
+
+        # If current day not in series, add it
+        if equity:
+            timestamps.append("now")
+            equity_series.append(float(equity))
+            total_pnl = sum(float(r[1]) for r in rows) if rows else 0
+            unrealized = sum(p.get("unrealized_pnl", 0) for p in positions)
+            pnl_series.append(total_pnl + unrealized)
+
+        start_equity = equity_series[0] if equity_series else float(equity) or 100000
+        period_pnl = float(equity) - start_equity if equity else 0
+        period_pnl_pct = (period_pnl / start_equity * 100) if start_equity else 0
+
+        # Win rate from orders
+        order_rows = con.execute(
+            "SELECT COUNT(*) FILTER (WHERE filled_price IS NOT NULL AND side = 'sell'), "
+            "COUNT(*) FILTER (WHERE filled_price IS NOT NULL) "
+            "FROM orders"
+        ).fetchone()
+        total_fills = order_rows[1] if order_rows else 0
+        win_rate = 0.0
+
+        # Realized P&L
+        realized = con.execute(
+            "SELECT COALESCE(SUM(realized_pnl), 0) FROM daily_pnl"
+        ).fetchone()[0]
+    finally:
+        con.close()
+
+    return {
+        "timestamps": timestamps,
+        "equity": equity_series,
+        "pnl": pnl_series,
+        "summary": {
+            "total_equity": round(float(equity), 2) if equity else 0,
+            "period_pnl": round(period_pnl, 2),
+            "period_pnl_pct": round(period_pnl_pct, 2),
+            "realized_pnl": round(float(realized), 2),
+            "buying_power": round(float(buying_power), 2) if buying_power else 0,
+            "cash": round(float(cash), 2) if cash else 0,
+            "day_positions": day_positions,
+            "swing_positions": swing_positions,
+            "win_rate": round(win_rate, 4),
+        },
+    }
+
+
+@app.get("/news/feed")
+def get_news_feed(limit: int = 20):
+    """Return aggregated news feed across all tracked symbols with thumbnails."""
+    from strategies.news_fetcher import fetch_news as _fetch_news
+    from strategies.sentiment import score_articles as _score_articles
+
+    all_articles = []
+    for symbol in SYMBOLS[:6]:  # Limit to core symbols to avoid slow response
+        articles = _fetch_news(symbol, limit=5)
+        scored = _score_articles(articles)
+        for a in scored:
+            a["symbol"] = symbol
+        all_articles.extend(scored)
+
+    # Sort by published_at descending, deduplicate by headline
+    seen = set()
+    unique = []
+    for a in all_articles:
+        if a["headline"] not in seen:
+            seen.add(a["headline"])
+            unique.append(a)
+
+    unique.sort(key=lambda x: x.get("published_at") or "", reverse=True)
+    return {"articles": unique[:limit]}

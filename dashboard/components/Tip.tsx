@@ -44,7 +44,7 @@ export default function Tip({ text, inline = false }: TipProps) {
           setShow(!show);
         }}
       >
-        <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gray-200 text-gray-500 text-[10px] font-bold cursor-help hover:bg-blue-100 hover:text-blue-600 transition-colors">
+        <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-navy-600 text-text-secondary text-[10px] font-bold cursor-help hover:bg-accent-purple/30 hover:text-accent-purple-light transition-colors">
           ?
         </span>
       </span>
@@ -58,11 +58,11 @@ export default function Tip({ text, inline = false }: TipProps) {
               transform: "translate(-50%, -100%)",
               zIndex: 9999,
             }}
-            className="w-64 px-3 py-2 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg shadow-lg leading-relaxed pointer-events-none"
+            className="w-64 px-3 py-2 text-xs text-text-primary bg-navy-800 border border-navy-600 rounded-lg shadow-lg leading-relaxed pointer-events-none"
           >
             {text}
-            <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-white" />
-            <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-200" />
+            <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-navy-800" />
+            <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-navy-600" />
           </span>,
           document.body
         )}

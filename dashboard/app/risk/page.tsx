@@ -16,8 +16,8 @@ interface FieldMeta {
 const FIELDS: FieldMeta[] = [
   { key: "max_daily_loss_pct", label: "Max Daily Loss", description: "Halt all trading when daily loss exceeds this % of equity", format: "pct" },
   { key: "max_position_size_pct", label: "Max Position Size", description: "Reject signals that would exceed this % of equity per position", format: "pct" },
-  { key: "max_open_positions", label: "Max Open Positions", description: "Reject signals when this many positions are already open (1–10)", format: "int" },
-  { key: "min_signal_confidence", label: "Min Signal Confidence", description: "Reject signals below this confidence threshold (0.0–1.0)", format: "pct" },
+  { key: "max_open_positions", label: "Max Open Positions", description: "Reject signals when this many positions are already open (1\u201310)", format: "int" },
+  { key: "min_signal_confidence", label: "Min Signal Confidence", description: "Reject signals below this confidence threshold (0.0\u20131.0)", format: "pct" },
   { key: "order_throttle_secs", label: "Order Throttle", description: "Minimum seconds between orders for the same symbol", format: "secs" },
   { key: "eod_flatten_time_et", label: "EOD Flatten Time (ET)", description: "All positions market-sold at this time. Not editable in v1.", format: "time", readOnly: true },
 ];
@@ -139,8 +139,8 @@ export default function RiskPage() {
   if (loading) {
     return (
       <div>
-        <h2 className="text-2xl font-bold mb-4">Risk Settings</h2>
-        <p className="text-gray-400 text-sm">Loading risk configuration...</p>
+        <h2 className="text-2xl font-bold text-text-primary mb-4">Risk Settings</h2>
+        <p className="text-text-secondary text-sm">Loading risk configuration...</p>
       </div>
     );
   }
@@ -148,23 +148,23 @@ export default function RiskPage() {
   if (fetchError) {
     return (
       <div>
-        <h2 className="text-2xl font-bold mb-4">Risk Settings</h2>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 text-sm">{fetchError}</div>
-        <button onClick={fetchData} className="mt-3 text-sm px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700">Retry</button>
+        <h2 className="text-2xl font-bold text-text-primary mb-4">Risk Settings</h2>
+        <div className="rounded-lg border border-loss/30 bg-loss/10 p-4 text-loss text-sm">{fetchError}</div>
+        <button onClick={fetchData} className="mt-3 text-sm px-3 py-1.5 rounded bg-accent-purple text-white hover:bg-accent-purple-dark">Retry</button>
       </div>
     );
   }
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-1">Risk Settings</h2>
-      <p className="text-gray-500 text-sm mb-6">
+      <h2 className="text-2xl font-bold text-text-primary mb-1">Risk Settings</h2>
+      <p className="text-text-secondary text-sm mb-6">
         View and edit risk rule thresholds. Changes take effect immediately.
       </p>
 
       {/* Config fields */}
-      <div className="rounded-lg border border-gray-200 bg-white shadow-sm mb-6">
-        <div className="divide-y divide-gray-100">
+      <div className="rounded-lg border border-navy-600 bg-navy-900 mb-6">
+        <div className="divide-y divide-navy-600">
           {config && FIELDS.map((field) => {
             const currentValue = config[field.key];
             const inputValue = edited[field.key] ?? toInputValue(currentValue, field.format);
@@ -174,21 +174,21 @@ export default function RiskPage() {
               <div key={field.key} className="px-5 py-4 flex items-start gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-900">{field.label}</label>
+                    <label className="text-sm font-medium text-text-primary">{field.label}</label>
                     {field.readOnly && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-400">read-only</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-navy-600 text-text-secondary">read-only</span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400 mt-0.5">{field.description}</p>
-                  {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+                  <p className="text-xs text-text-secondary mt-0.5">{field.description}</p>
+                  {error && <p className="text-xs text-loss mt-1">{error}</p>}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {field.readOnly ? (
                     <div className="relative group">
-                      <span className="text-sm font-mono bg-gray-50 border border-gray-200 rounded px-3 py-1.5 text-gray-500 cursor-help">
+                      <span className="text-sm font-mono bg-navy-800 border border-navy-600 rounded px-3 py-1.5 text-text-secondary cursor-help">
                         {String(currentValue)}
                       </span>
-                      <div className="absolute bottom-full right-0 mb-1 hidden group-hover:block bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
+                      <div className="absolute bottom-full right-0 mb-1 hidden group-hover:block bg-navy-800 text-text-primary text-xs rounded px-2 py-1 whitespace-nowrap">
                         EOD flatten time is not configurable in v1
                       </div>
                     </div>
@@ -198,12 +198,12 @@ export default function RiskPage() {
                         type="text"
                         value={inputValue}
                         onChange={(e) => handleInputChange(field.key, e.target.value)}
-                        className={`w-24 text-sm font-mono border rounded px-3 py-1.5 text-right focus:outline-none focus:ring-1 focus:ring-blue-400 ${
-                          error ? "border-red-300 bg-red-50" : "border-gray-200"
+                        className={`w-24 text-sm font-mono border rounded px-3 py-1.5 text-right bg-navy-800 text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-blue ${
+                          error ? "border-loss bg-loss/10" : "border-navy-600"
                         }`}
                       />
-                      {field.format === "pct" && <span className="text-xs text-gray-400">%</span>}
-                      {field.format === "secs" && <span className="text-xs text-gray-400">sec</span>}
+                      {field.format === "pct" && <span className="text-xs text-text-secondary">%</span>}
+                      {field.format === "secs" && <span className="text-xs text-text-secondary">sec</span>}
                     </div>
                   )}
                 </div>
@@ -213,16 +213,16 @@ export default function RiskPage() {
         </div>
 
         {/* Save bar */}
-        <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+        <div className="px-5 py-3 bg-navy-800 border-t border-navy-600 flex items-center justify-between">
           {saveError && (
-            <p className="text-sm text-red-600">{saveError}</p>
+            <p className="text-sm text-loss">{saveError}</p>
           )}
           {!saveError && <span />}
           <div className="flex gap-2">
             {hasChanges && (
               <button
                 onClick={() => { setEdited({}); setErrors({}); setSaveError(null); }}
-                className="text-xs px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50"
+                className="text-xs px-3 py-1.5 rounded border border-navy-600 text-text-secondary hover:bg-navy-700"
               >
                 Discard
               </button>
@@ -230,7 +230,7 @@ export default function RiskPage() {
             <button
               onClick={handleSave}
               disabled={!hasChanges || saving}
-              className="text-xs px-4 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="text-xs px-4 py-1.5 rounded bg-accent-purple text-white hover:bg-accent-purple-dark disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? "Saving..." : "Save Changes"}
             </button>

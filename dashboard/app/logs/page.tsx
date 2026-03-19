@@ -5,13 +5,13 @@ import { useSseEvents } from "@/hooks/useSseEvents";
 import type { SseEvent, SseEventType } from "@/types";
 
 const EVENT_COLORS: Record<SseEventType, string> = {
-  ORDER_FILL: "bg-green-100 text-green-700",
-  RISK_BREACH: "bg-red-100 text-red-700",
-  TRADING_HALTED: "bg-red-100 text-red-700",
-  TRADING_RESUMED: "bg-green-100 text-green-700",
-  POSITION_UPDATE: "bg-blue-100 text-blue-700",
-  RISK_CONFIG_UPDATED: "bg-yellow-100 text-yellow-700",
-  DAILY_PNL: "bg-gray-100 text-gray-500",
+  ORDER_FILL: "bg-gain/15 text-gain",
+  RISK_BREACH: "bg-loss/15 text-loss",
+  TRADING_HALTED: "bg-loss/15 text-loss",
+  TRADING_RESUMED: "bg-gain/15 text-gain",
+  POSITION_UPDATE: "bg-accent-purple/15 text-accent-purple-light",
+  RISK_CONFIG_UPDATED: "bg-yellow-500/15 text-yellow-500",
+  DAILY_PNL: "bg-navy-600 text-text-secondary",
 };
 
 function formatTimestamp(iso: string): string {
@@ -65,8 +65,8 @@ export default function LogsPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold">Logs</h2>
-          <p className="text-gray-500 text-sm mt-1">
+          <h2 className="text-2xl font-bold text-text-primary">Logs</h2>
+          <p className="text-text-secondary text-sm mt-1">
             Real-time signal and order event stream from the execution engine.
           </p>
         </div>
@@ -75,36 +75,36 @@ export default function LogsPage() {
             onClick={() => setAutoScroll(!autoScroll)}
             className={`text-xs px-3 py-1.5 rounded border ${
               autoScroll
-                ? "border-blue-200 bg-blue-50 text-blue-600"
-                : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                ? "border-accent-purple/40 bg-accent-purple/15 text-accent-purple-light"
+                : "border-navy-600 text-text-secondary hover:bg-navy-700"
             }`}
           >
             {autoScroll ? "Auto-scroll: ON" : "Auto-scroll: OFF"}
           </button>
           <button
             onClick={handleClear}
-            className="text-xs px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50 text-gray-600"
+            className="text-xs px-3 py-1.5 rounded border border-navy-600 hover:bg-navy-700 text-text-secondary"
           >
             Clear
           </button>
         </div>
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-lg border border-navy-600 bg-navy-900 overflow-hidden">
         {/* Status bar */}
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-          <span className="text-xs text-gray-500 uppercase tracking-wide">
+        <div className="px-4 py-3 bg-navy-800 border-b border-navy-600 flex items-center justify-between">
+          <span className="text-xs text-text-secondary uppercase tracking-wide">
             SSE Event Stream
           </span>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400">{displayEvents.length} events</span>
+            <span className="text-xs text-text-secondary">{displayEvents.length} events</span>
             <span className="inline-flex items-center gap-1.5 text-xs">
               <span
                 className={`w-2 h-2 rounded-full ${
-                  isConnected ? "bg-green-500" : "bg-gray-300"
+                  isConnected ? "bg-gain" : "bg-gray-500"
                 }`}
               />
-              <span className={isConnected ? "text-green-600" : "text-gray-400"}>
+              <span className={isConnected ? "text-gain" : "text-text-secondary"}>
                 {isConnected ? "Connected" : "Disconnected"}
               </span>
             </span>
@@ -117,17 +117,17 @@ export default function LogsPage() {
           className="p-3 h-[calc(100vh-280px)] min-h-[400px] overflow-y-auto font-mono text-xs"
         >
           {orderedEvents.length === 0 ? (
-            <div className="text-gray-400 text-center py-12">Waiting for events...</div>
+            <div className="text-text-secondary text-center py-12">Waiting for events...</div>
           ) : (
             <div className="space-y-0.5">
               {orderedEvents.map((event, i) => {
-                const colorClass = EVENT_COLORS[event.event_type] || "bg-gray-100 text-gray-500";
+                const colorClass = EVENT_COLORS[event.event_type] || "bg-navy-600 text-text-secondary";
                 return (
                   <div
                     key={i}
-                    className="flex items-start gap-2 py-1 px-1 rounded hover:bg-gray-50"
+                    className="flex items-start gap-2 py-1 px-1 rounded hover:bg-navy-800"
                   >
-                    <span className="text-gray-400 shrink-0 w-16">
+                    <span className="text-text-secondary shrink-0 w-16">
                       {formatTimestamp(event.timestamp)}
                     </span>
                     <span
@@ -135,7 +135,7 @@ export default function LogsPage() {
                     >
                       {event.event_type}
                     </span>
-                    <span className="text-gray-500 truncate">
+                    <span className="text-text-secondary truncate">
                       {payloadSummary(event.payload)}
                     </span>
                   </div>

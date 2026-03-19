@@ -15,10 +15,11 @@ Examples:
 
 Strategy Engine (Python FastAPI):
   - Directory: strategy-engine/
-  - Start: cd strategy-engine && .venv/bin/uvicorn main:app --port 8000 > /tmp/strategy-engine.log 2>&1 &
+  - Start: cd /home/mmyers/Projects/AlgoTrader && set -a && source .env && set +a && cd strategy-engine && .venv/bin/uvicorn main:app --port 8000 > /tmp/strategy-engine.log 2>&1 &
   - Port: 8000
   - Process pattern: "uvicorn main:app --port 8000"
   - Log file: /tmp/strategy-engine.log
+  - NOTE: Must source .env before starting so Alpaca API keys are available for news/market endpoints
 
 Execution Engine (Rust Axum):
   - Directory: execution-engine/
@@ -32,9 +33,10 @@ Post-start hooks (after BOTH strategy + execution engines are up):
 
 Dashboard (Next.js):
   - Directory: dashboard/
-  - Start: cd dashboard && npm run dev &
+  - Start: cd /home/mmyers/Projects/AlgoTrader/dashboard && npm run dev > /tmp/dashboard.log 2>&1 &
   - Port: 3000
   - Process pattern: "next dev --port 3000"
+  - Log file: /tmp/dashboard.log
 
 ## Behavior
 

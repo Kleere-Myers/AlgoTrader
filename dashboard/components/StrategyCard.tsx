@@ -17,27 +17,27 @@ const STRATEGY_TOOLTIPS: Record<string, string> = {
 
 function confidenceBadge(confidence: number) {
   const pct = (confidence * 100).toFixed(0);
-  if (confidence >= 0.7) return <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700">{pct}%</span>;
-  if (confidence >= 0.4) return <span className="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-700">{pct}%</span>;
-  return <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-700">{pct}%</span>;
+  if (confidence >= 0.7) return <span className="text-xs px-2 py-0.5 rounded bg-gain/15 text-gain">{pct}%</span>;
+  if (confidence >= 0.4) return <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/15 text-yellow-500">{pct}%</span>;
+  return <span className="text-xs px-2 py-0.5 rounded bg-loss/15 text-loss">{pct}%</span>;
 }
 
 function winRateBadge(winRate: number | null) {
-  if (winRate === null) return <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-400">N/A</span>;
+  if (winRate === null) return <span className="text-xs px-2 py-0.5 rounded bg-navy-600 text-text-secondary">N/A</span>;
   const pct = (winRate * 100).toFixed(1);
-  if (winRate > 0.55) return <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700">{pct}%</span>;
-  if (winRate >= 0.45) return <span className="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-700">{pct}%</span>;
-  return <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-700">{pct}%</span>;
+  if (winRate > 0.55) return <span className="text-xs px-2 py-0.5 rounded bg-gain/15 text-gain">{pct}%</span>;
+  if (winRate >= 0.45) return <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/15 text-yellow-500">{pct}%</span>;
+  return <span className="text-xs px-2 py-0.5 rounded bg-loss/15 text-loss">{pct}%</span>;
 }
 
 function directionBadge(direction: string) {
   const colors: Record<string, string> = {
-    BUY: "bg-green-100 text-green-700",
-    SELL: "bg-red-100 text-red-700",
-    HOLD: "bg-gray-100 text-gray-500",
+    BUY: "bg-gain/15 text-gain",
+    SELL: "bg-loss/15 text-loss",
+    HOLD: "bg-navy-600 text-text-secondary",
   };
   return (
-    <span className={`text-xs px-2 py-0.5 rounded font-medium ${colors[direction] || "bg-gray-100 text-gray-500"}`}>
+    <span className={`text-xs px-2 py-0.5 rounded font-medium ${colors[direction] || "bg-navy-600 text-text-secondary"}`}>
       {direction}
     </span>
   );
@@ -107,10 +107,10 @@ export default function StrategyCard({ strategy, symbols, onUpdate, onBacktestCo
   const hasEdits = Object.keys(editedParams).length > 0;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="rounded-lg border border-navy-600 bg-navy-900 p-5">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-sm">
+        <h3 className="font-semibold text-sm text-text-primary">
           {strategy.name}
           {STRATEGY_TOOLTIPS[strategy.name] && (
             <Tip text={STRATEGY_TOOLTIPS[strategy.name]} inline />
@@ -120,7 +120,7 @@ export default function StrategyCard({ strategy, symbols, onUpdate, onBacktestCo
           onClick={handleToggle}
           disabled={saving}
           className={`relative w-10 h-5 rounded-full transition-colors ${
-            strategy.enabled ? "bg-blue-600" : "bg-gray-300"
+            strategy.enabled ? "bg-accent-purple" : "bg-navy-600"
           }`}
         >
           <span
@@ -137,12 +137,12 @@ export default function StrategyCard({ strategy, symbols, onUpdate, onBacktestCo
           <>
             {directionBadge(strategy.last_signal.direction)}
             {confidenceBadge(strategy.last_signal.confidence)}
-            <span className="text-xs text-gray-400">{strategy.last_signal.symbol}</span>
+            <span className="text-xs text-text-secondary">{strategy.last_signal.symbol}</span>
           </>
         ) : (
-          <span className="text-xs text-gray-400">No signals yet</span>
+          <span className="text-xs text-text-secondary">No signals yet</span>
         )}
-        <span className="text-xs text-gray-400 ml-auto">Win rate:</span>
+        <span className="text-xs text-text-secondary ml-auto">Win rate:</span>
         {winRateBadge(strategy.win_rate)}
       </div>
 
@@ -150,7 +150,7 @@ export default function StrategyCard({ strategy, symbols, onUpdate, onBacktestCo
       <div className="mb-3">
         <button
           onClick={() => setParamsExpanded(!paramsExpanded)}
-          className="text-xs text-blue-600 hover:text-blue-800"
+          className="text-xs text-accent-purple hover:text-accent-purple-light"
         >
           {paramsExpanded ? "Hide Params" : "Edit Params"}
         </button>
@@ -158,14 +158,14 @@ export default function StrategyCard({ strategy, symbols, onUpdate, onBacktestCo
           <div className="mt-2 space-y-1.5">
             {Object.entries(strategy.params).map(([key, value]) => (
               <div key={key} className="flex items-center gap-2">
-                <label className="text-xs text-gray-500 w-32 text-right">{key}</label>
+                <label className="text-xs text-text-secondary w-32 text-right">{key}</label>
                 <input
                   type="text"
                   defaultValue={String(value)}
                   onChange={(e) =>
                     setEditedParams((prev) => ({ ...prev, [key]: e.target.value }))
                   }
-                  className="text-xs border border-gray-200 rounded px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  className="text-xs border border-navy-600 bg-navy-800 text-text-primary rounded px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-accent-blue"
                 />
               </div>
             ))}
@@ -173,7 +173,7 @@ export default function StrategyCard({ strategy, symbols, onUpdate, onBacktestCo
               <button
                 onClick={handleParamSave}
                 disabled={saving}
-                className="text-xs px-3 py-1 mt-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                className="text-xs px-3 py-1 mt-1 rounded bg-accent-purple text-white hover:bg-accent-purple-dark disabled:opacity-50"
               >
                 {saving ? "Saving..." : "Save Changes"}
               </button>
@@ -186,7 +186,7 @@ export default function StrategyCard({ strategy, symbols, onUpdate, onBacktestCo
       <button
         onClick={handleBacktest}
         disabled={backtesting}
-        className="text-xs px-3 py-1.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-50 w-full"
+        className="text-xs px-3 py-1.5 rounded bg-accent-purple/15 text-accent-purple-light hover:bg-accent-purple/25 disabled:opacity-50 w-full"
       >
         {backtesting
           ? `Running backtests... (${backtestProgress}/${symbols.length})`

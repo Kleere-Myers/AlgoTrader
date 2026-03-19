@@ -24,9 +24,9 @@ function formatRelativeTime(dateStr: string | null): string {
 }
 
 function sentimentColor(sentiment: string | null): string {
-  if (sentiment === "positive") return "bg-green-400";
-  if (sentiment === "negative") return "bg-red-400";
-  return "bg-gray-300";
+  if (sentiment === "positive") return "bg-gain";
+  if (sentiment === "negative") return "bg-loss";
+  return "bg-gray-500";
 }
 
 interface WatchlistCardProps {
@@ -50,25 +50,25 @@ export default function WatchlistCard({ symbol, company, news }: WatchlistCardPr
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm flex flex-col">
+    <div className="rounded-lg border border-navy-600 bg-navy-900 p-4 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <div>
-          <span className="font-bold text-base">{symbol}</span>
+          <span className="font-bold text-base text-text-primary">{symbol}</span>
           {company?.name && company.name !== symbol && (
-            <span className="text-xs text-gray-500 ml-2">{company.name}</span>
+            <span className="text-xs text-text-secondary ml-2">{company.name}</span>
           )}
         </div>
         <div className="text-right">
           {price != null && (
-            <span className="font-semibold text-sm">${price.toFixed(2)}</span>
+            <span className="font-semibold text-sm text-text-primary">${price.toFixed(2)}</span>
           )}
           {changePct != null && (
             <span
               className={`ml-2 text-xs px-1.5 py-0.5 rounded font-medium ${
                 changePct >= 0
-                  ? "bg-green-100 text-green-700"
-                  : "bg-red-100 text-red-700"
+                  ? "bg-gain/15 text-gain"
+                  : "bg-loss/15 text-loss"
               }`}
             >
               {changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%
@@ -80,13 +80,13 @@ export default function WatchlistCard({ symbol, company, news }: WatchlistCardPr
       {/* Tags */}
       <div className="flex flex-wrap gap-1.5 mb-3">
         {company?.sector && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">{company.sector}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-purple/15 text-accent-purple-light">{company.sector}</span>
         )}
         {company?.industry && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600">{company.industry}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-purple/10 text-accent-purple-light">{company.industry}</span>
         )}
         {company?.market_cap != null && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-navy-600 text-text-secondary">
             {formatMarketCap(company.market_cap)}
           </span>
         )}
@@ -95,18 +95,18 @@ export default function WatchlistCard({ symbol, company, news }: WatchlistCardPr
       {/* 52-week range */}
       {low52 != null && high52 != null && (
         <div className="mb-3">
-          <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
+          <div className="flex justify-between text-[10px] text-text-secondary mb-0.5">
             <span>${low52.toFixed(2)}</span>
-            <span className="text-gray-500 text-[10px]">52W Range</span>
+            <span className="text-text-secondary text-[10px]">52W Range</span>
             <span>${high52.toFixed(2)}</span>
           </div>
-          <div className="h-1.5 bg-gray-100 rounded-full relative">
+          <div className="h-1.5 bg-navy-600 rounded-full relative">
             <div
-              className="absolute top-0 left-0 h-full bg-blue-400 rounded-full"
+              className="absolute top-0 left-0 h-full bg-accent-purple rounded-full"
               style={{ width: `${rangePosition}%` }}
             />
             <div
-              className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-blue-600 rounded-full border-2 border-white shadow"
+              className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-accent-purple rounded-full border-2 border-navy-900 shadow"
               style={{ left: `${rangePosition}%`, marginLeft: "-5px" }}
             />
           </div>
@@ -126,14 +126,14 @@ export default function WatchlistCard({ symbol, company, news }: WatchlistCardPr
                       href={article.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-gray-800 hover:text-blue-600 line-clamp-2 leading-snug"
+                      className="text-xs text-text-secondary hover:text-accent-purple-light line-clamp-2 leading-snug"
                     >
                       {article.headline}
                     </a>
                   ) : (
-                    <span className="text-xs text-gray-800 line-clamp-2 leading-snug">{article.headline}</span>
+                    <span className="text-xs text-text-secondary line-clamp-2 leading-snug">{article.headline}</span>
                   )}
-                  <div className="flex gap-2 text-[10px] text-gray-400">
+                  <div className="flex gap-2 text-[10px] text-text-secondary">
                     {article.source && <span>{article.source}</span>}
                     {article.published_at && <span>{formatRelativeTime(article.published_at)}</span>}
                   </div>
@@ -142,19 +142,19 @@ export default function WatchlistCard({ symbol, company, news }: WatchlistCardPr
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-gray-400">No news available</p>
+          <p className="text-xs text-text-secondary">No news available</p>
         )}
       </div>
 
       {/* Summary */}
       {company?.summary && (
-        <div className="mt-3 pt-2 border-t border-gray-100">
-          <p className="text-[11px] text-gray-500 leading-relaxed">
+        <div className="mt-3 pt-2 border-t border-navy-600">
+          <p className="text-[11px] text-text-secondary leading-relaxed">
             {expanded ? company.summary : company.summary.slice(0, 150)}
             {company.summary.length > 150 && (
               <button
                 onClick={() => setExpanded(!expanded)}
-                className="text-blue-500 hover:text-blue-700 ml-1"
+                className="text-accent-purple hover:text-accent-purple-light ml-1"
               >
                 {expanded ? "less" : "...more"}
               </button>

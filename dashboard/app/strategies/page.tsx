@@ -33,8 +33,8 @@ export default function StrategiesPage() {
   if (loading) {
     return (
       <div>
-        <h2 className="text-2xl font-bold mb-4">Strategies</h2>
-        <p className="text-gray-400 text-sm">Loading strategies...</p>
+        <h2 className="text-2xl font-bold text-text-primary mb-4">Strategies</h2>
+        <p className="text-text-secondary text-sm">Loading strategies...</p>
       </div>
     );
   }
@@ -42,13 +42,13 @@ export default function StrategiesPage() {
   if (error) {
     return (
       <div>
-        <h2 className="text-2xl font-bold mb-4">Strategies</h2>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 text-sm">
+        <h2 className="text-2xl font-bold text-text-primary mb-4">Strategies</h2>
+        <div className="rounded-lg border border-loss/30 bg-loss/10 p-4 text-loss text-sm">
           {error}
         </div>
         <button
           onClick={fetchStrategies}
-          className="mt-3 text-sm px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700"
+          className="mt-3 text-sm px-3 py-1.5 rounded bg-accent-purple text-white hover:bg-accent-purple-dark"
         >
           Retry
         </button>
@@ -60,21 +60,21 @@ export default function StrategiesPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold">Strategies</h2>
-          <p className="text-gray-500 text-sm mt-1">
+          <h2 className="text-2xl font-bold text-text-primary">Strategies</h2>
+          <p className="text-text-secondary text-sm mt-1">
             Enable/disable strategies, edit parameters, and trigger backtest runs.
           </p>
         </div>
         <button
           onClick={fetchStrategies}
-          className="text-xs px-3 py-1.5 rounded border border-gray-200 hover:bg-gray-50 text-gray-600"
+          className="text-xs px-3 py-1.5 rounded border border-navy-600 hover:bg-navy-700 text-text-secondary"
         >
           Refresh
         </button>
       </div>
 
       {strategies.length === 0 ? (
-        <div className="rounded border border-dashed border-gray-300 p-12 text-center text-gray-400">
+        <div className="rounded border border-dashed border-navy-600 p-12 text-center text-text-secondary">
           No strategies registered in the strategy engine
         </div>
       ) : (

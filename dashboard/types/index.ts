@@ -123,6 +123,48 @@ export interface NewsArticle {
   published_at: string | null;
   sentiment: string | null;
   sentiment_score: number | null;
+  thumbnail_url?: string | null;
+  symbol?: string;
+}
+
+export interface MarketIndex {
+  symbol: string;
+  name: string;
+  current_price: number;
+  previous_close: number;
+  change_abs: number;
+  change_pct: number;
+  intraday_prices: { timestamp: string; value: number }[];
+}
+
+export interface SectorPerformance {
+  sector: string;
+  symbol: string;
+  change_pct: number;
+}
+
+export interface MarketMover {
+  symbol: string;
+  name: string;
+  current_price: number | null;
+  change_pct: number;
+}
+
+export interface PortfolioPnlHistory {
+  timestamps: string[];
+  equity: number[];
+  pnl: number[];
+  summary: {
+    total_equity: number;
+    period_pnl: number;
+    period_pnl_pct: number;
+    realized_pnl: number;
+    buying_power: number;
+    cash: number;
+    day_positions: number;
+    swing_positions: number;
+    win_rate: number;
+  };
 }
 
 export interface OhlcvBar {

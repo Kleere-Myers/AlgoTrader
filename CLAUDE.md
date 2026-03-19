@@ -134,6 +134,7 @@ Day positions auto-closed by 3:45 PM ET (swing positions are exempt)
 6. All Rust order submission must pass risk validation BEFORE calling Alpaca API.
 7. `.env` and `data/` are always in `.gitignore`.
 8. DuckDB version must stay aligned between Python and Rust. Never upgrade one without the other.
+9. Dashboard must follow the Yahoo Finance dark theme. Run `/styling` before any UI changes.
 
 ---
 
@@ -181,18 +182,53 @@ strategies into a single conviction score. Positions with `trade_type="swing"` a
 from EOD auto-flatten.
 
 Shared utilities for the news strategy:
-- `strategies/news_fetcher.py` — Alpaca News API + yfinance fallback, 5-min TTL cache
+- `strategies/news_fetcher.py` — Alpaca News API (with thumbnail extraction) + yfinance fallback, 5-min TTL cache
 - `strategies/sentiment.py` — FinBERT (`ProsusAI/finbert`) lazy-loaded sentiment scorer
 
 FinBERT model (~500MB) auto-downloads on first use to `~/.cache/huggingface/`.
 
-## Dashboard Routes (10 total)
+### Strategy Engine Market Data Endpoints
+| Endpoint | Purpose | Cache |
+|---|---|---|
+| `GET /market/indices` | 10 markets (indices, VIX, bonds, commodities, crypto, FX) with sparkline data | 60s |
+| `GET /market/sectors` | 11 sector ETF daily performance | 5min |
+| `GET /market/movers` | Portfolio symbols ranked by daily change % | 60s |
+| `GET /portfolio/pnl-history?range=` | P&L time series + summary (1d/1w/1m/3m/ytd) | none |
+| `GET /news/feed?limit=` | Aggregated news across tracked symbols with thumbnails | none |
+
+**Important:** The strategy engine must be started with `.env` sourced so Alpaca API
+keys are available for news and market data endpoints.
+
+## Dashboard (Next.js 14 — Yahoo Finance dark theme)
+
+**Design system:** Yahoo Finance dark mode (`/styling` skill for full reference).
+Top navbar layout, full-width, Helvetica Neue font, `#101518` body background.
+
+### Routes (10 total)
 `/` Overview, `/watchlist` Watchlist, `/positions`, `/orders`, `/strategies`,
 `/backtest`, `/risk`, `/logs`, `/guide`
 
-The Watchlist page (`/watchlist`) shows company info + news with sentiment for all
-tracked symbols. Data comes from `GET /company/{symbol}` and `GET /news/{symbol}`
-on the strategy engine.
+### Overview Page (`/`)
+Yahoo Finance-inspired layout with:
+- **Markets carousel** — horizontal scrolling cards for S&P 500, Dow 30, Nasdaq,
+  Russell 2000, VIX, 10-Yr Bond, Gold, Crude Oil, Bitcoin, EUR/USD
+  (data from `GET /market/indices` on strategy engine, 60s cache)
+- **Sector performance** — horizontal bars showing daily change for 11 sector ETFs
+  (`GET /market/sectors`, 5-min cache)
+- **Portfolio P&L chart** — area chart with 1D/1W/1M/3M/YTD tabs + financial summary sidebar
+  (`GET /portfolio/pnl-history?range=`)
+- **Top Movers** — gainers/losers from tracked symbols (`GET /market/movers`)
+- **News feed** — editorial cards with thumbnails, sentiment, symbol badges
+  (`GET /news/feed`)
+
+### Components (14 total)
+Navbar, MarketIndexCard, SparklineChart, SectorPerformanceBar, PnlChart,
+PortfolioSummary, MoversList, NewsCard, CandlestickChart, EquityCurveChart,
+StrategyCard, WatchlistCard, EmergencyHaltButton, Tip
+
+### Watchlist Page
+Shows company info + news with sentiment for all tracked symbols.
+Data from `GET /company/{symbol}` and `GET /news/{symbol}` on strategy engine.
 
 ## Known Limitations
 - MLSignalGenerator trained on daily bars only (59.4% CV accuracy). Will improve
@@ -208,6 +244,7 @@ on the strategy engine.
 
 ## Skills (Slash Commands)
 - `/dev <start|stop|restart|status> [service]` — manage dev services
+- `/styling` — dashboard layout and styling reference (colors, typography, component patterns)
 - `/permissions <show|reset|add <rule>>` — manage tool permissions
 
 ## Files That Must Be Gitignored

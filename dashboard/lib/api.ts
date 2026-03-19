@@ -1,4 +1,4 @@
-import type { AccountInfo, Position, Order, Strategy, BacktestResult, BacktestEquityPoint, OhlcvBar, RiskConfig, CompanyInfo, NewsArticle } from "@/types";
+import type { AccountInfo, Position, Order, Strategy, BacktestResult, BacktestEquityPoint, OhlcvBar, RiskConfig, CompanyInfo, NewsArticle, MarketIndex, SectorPerformance, MarketMover, PortfolioPnlHistory } from "@/types";
 
 const EXECUTION_URL =
   process.env.NEXT_PUBLIC_EXECUTION_URL || "http://localhost:8080";
@@ -75,4 +75,14 @@ export const strategyApi = {
     fetchJson<CompanyInfo>(`${STRATEGY_URL}/company/${symbol}`),
   getNews: (symbol: string) =>
     fetchJson<{ symbol: string; articles: NewsArticle[] }>(`${STRATEGY_URL}/news/${symbol}`),
+  getMarketIndices: () =>
+    fetchJson<MarketIndex[]>(`${STRATEGY_URL}/market/indices`),
+  getSectorPerformance: () =>
+    fetchJson<SectorPerformance[]>(`${STRATEGY_URL}/market/sectors`),
+  getMarketMovers: () =>
+    fetchJson<{ gainers: MarketMover[]; losers: MarketMover[] }>(`${STRATEGY_URL}/market/movers`),
+  getPnlHistory: (range: string) =>
+    fetchJson<PortfolioPnlHistory>(`${STRATEGY_URL}/portfolio/pnl-history?range=${range}`),
+  getNewsFeed: (limit = 20) =>
+    fetchJson<{ articles: NewsArticle[] }>(`${STRATEGY_URL}/news/feed?limit=${limit}`),
 };

@@ -26,8 +26,8 @@ function CandlestickShape(props: any) {
 
   const { open, close, high, low } = payload;
   const isGreen = close >= open;
-  const fill = isGreen ? "#16a34a" : "#dc2626";
-  const stroke = isGreen ? "#15803d" : "#b91c1c";
+  const fill = isGreen ? "#21d87d" : "#fc7a6e";
+  const stroke = isGreen ? "#1abc6a" : "#e0695e";
 
   // Scale: y is the top of the bar area, we need to compute pixel positions
   // The bar is rendered with y at the value position, so we use the yAxis scale
@@ -67,7 +67,7 @@ function SignalMarker(props: any) {
   if (!cx || !cy || !payload) return null;
 
   const isBuy = payload.direction === "BUY";
-  const color = isBuy ? "#16a34a" : "#dc2626";
+  const color = isBuy ? "#21d87d" : "#fc7a6e";
   const size = 8;
 
   // Upward triangle for BUY, downward for SELL
@@ -81,7 +81,7 @@ function SignalMarker(props: any) {
 export default function CandlestickChart({ bars, signals, symbol }: CandlestickChartProps) {
   if (bars.length === 0) {
     return (
-      <div className="rounded border border-dashed border-gray-300 p-12 text-center text-gray-400">
+      <div className="rounded border border-dashed border-navy-600 p-12 text-center text-text-secondary">
         No bar data available for {symbol}
       </div>
     );
@@ -122,17 +122,17 @@ export default function CandlestickChart({ bars, signals, symbol }: CandlestickC
   return (
     <ResponsiveContainer width="100%" height={400}>
       <ComposedChart data={chartData} margin={{ top: 10, right: 20, bottom: 5, left: 10 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+        <CartesianGrid strokeDasharray="3 3" stroke="#3a434c" />
         <XAxis
           dataKey="timestamp"
           tickFormatter={formatTime}
-          tick={{ fontSize: 10 }}
+          tick={{ fontSize: 10, fill: "#b0b9c1" }}
           interval="preserveStartEnd"
         />
         <YAxis
           yAxisId="price"
           domain={[minPrice, maxPrice]}
-          tick={{ fontSize: 10 }}
+          tick={{ fontSize: 10, fill: "#b0b9c1" }}
           tickFormatter={(v: number) => `$${v.toFixed(0)}`}
           orientation="right"
         />
@@ -148,13 +148,13 @@ export default function CandlestickChart({ bars, signals, symbol }: CandlestickC
             const d = payload[0]?.payload;
             if (!d) return null;
             return (
-              <div className="bg-white border border-gray-200 rounded shadow-sm p-2 text-xs">
+              <div className="bg-navy-800 border border-navy-600 rounded p-2 text-xs text-text-primary">
                 <p className="font-medium mb-1">{new Date(d.timestamp).toLocaleString()}</p>
                 <p>O: ${d.open?.toFixed(2)} H: ${d.high?.toFixed(2)}</p>
                 <p>L: ${d.low?.toFixed(2)} C: ${d.close?.toFixed(2)}</p>
-                <p className="text-gray-400">Vol: {d.volume?.toLocaleString()}</p>
+                <p className="text-text-secondary">Vol: {d.volume?.toLocaleString()}</p>
                 {d.direction && (
-                  <p className={d.direction === "BUY" ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
+                  <p className={d.direction === "BUY" ? "text-gain font-medium" : "text-loss font-medium"}>
                     Signal: {d.direction}
                   </p>
                 )}
@@ -163,7 +163,7 @@ export default function CandlestickChart({ bars, signals, symbol }: CandlestickC
           }}
         />
         {/* Volume bars */}
-        <Bar dataKey="volume" yAxisId="volume" fill="#e5e7eb" barSize={6} isAnimationActive={false} />
+        <Bar dataKey="volume" yAxisId="volume" fill="#3a434c" barSize={6} isAnimationActive={false} />
         {/* Candlestick body — uses range as dummy value, custom shape renders actual OHLC */}
         <Bar
           dataKey="range"

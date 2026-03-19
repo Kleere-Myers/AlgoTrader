@@ -16,8 +16,8 @@ export default function GuidePage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-1">Guide</h2>
-      <p className="text-gray-500 text-sm mb-6">
+      <h2 className="text-2xl font-bold text-text-primary mb-1">Guide</h2>
+      <p className="text-text-secondary text-sm mb-6">
         Everything you need to understand how AlgoTrader works, explained in plain English.
       </p>
 
@@ -29,8 +29,8 @@ export default function GuidePage() {
             onClick={() => setActive(s.id)}
             className={`text-sm px-3 py-1.5 rounded-full transition-colors ${
               active === s.id
-                ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                ? "bg-accent-purple text-white"
+                : "bg-navy-600 text-text-secondary hover:bg-navy-700"
             }`}
           >
             {s.label}
@@ -38,7 +38,7 @@ export default function GuidePage() {
         ))}
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm prose prose-sm max-w-none">
+      <div className="bg-navy-900 rounded-lg border border-navy-600 p-6 prose prose-sm prose-invert max-w-none">
         {active === "what" && <WhatSection />}
         {active === "how" && <HowSection />}
         {active === "strategies" && <StrategiesSection />}
@@ -51,11 +51,11 @@ export default function GuidePage() {
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-lg font-bold text-gray-900 mb-3">{children}</h3>;
+  return <h3 className="text-lg font-bold text-text-primary mb-3">{children}</h3>;
 }
 
 function P({ children }: { children: React.ReactNode }) {
-  return <p className="text-gray-700 leading-relaxed mb-3">{children}</p>;
+  return <p className="text-text-secondary leading-relaxed mb-3">{children}</p>;
 }
 
 function WhatSection() {
@@ -82,7 +82,7 @@ function WhatSection() {
         It only trades during regular market hours (9:30 AM to 4:00 PM Eastern Time, Monday through
         Friday) and automatically sells everything by 3:45 PM to avoid holding positions overnight.
       </P>
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800 mt-4">
+      <div className="bg-yellow-500/15 border border-yellow-500/30 rounded-lg p-4 text-sm text-yellow-500 mt-4">
         <strong>Important:</strong> AlgoTrader starts in &quot;paper trading&quot; mode, which means it uses
         fake money to simulate real trades. This lets you see how the strategies perform without
         risking real money. Never switch to live mode until you are confident in the results.
@@ -100,27 +100,27 @@ function HowSection() {
       </P>
 
       <div className="space-y-4 mb-4">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h4 className="font-semibold text-blue-900 mb-1">1. Market Data Arrives</h4>
-          <p className="text-sm text-blue-800">
+        <div className="bg-accent-purple/10 border border-accent-purple/30 rounded-lg p-4">
+          <h4 className="font-semibold text-accent-purple-light mb-1">1. Market Data Arrives</h4>
+          <p className="text-sm text-text-secondary">
             Every 5 minutes during market hours, your brokerage (Alpaca) sends the latest price data
             for all 6 stocks. This includes the open, high, low, close prices, and trading volume
             for that 5-minute window. This is stored in a local database on your computer.
           </p>
         </div>
 
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <h4 className="font-semibold text-green-900 mb-1">2. Strategies Analyze the Data</h4>
-          <p className="text-sm text-green-800">
+        <div className="bg-gain/10 border border-gain/30 rounded-lg p-4">
+          <h4 className="font-semibold text-gain mb-1">2. Strategies Analyze the Data</h4>
+          <p className="text-sm text-text-secondary">
             Each new price update is sent to the Strategy Engine, where all your active strategies
             look at the data and decide: should I BUY, SELL, or do nothing (HOLD)? Each strategy
             also reports how confident it is in its decision (0% to 100%).
           </p>
         </div>
 
-        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-          <h4 className="font-semibold text-purple-900 mb-1">3. Risk Checks and Execution</h4>
-          <p className="text-sm text-purple-800">
+        <div className="bg-accent-purple/10 border border-accent-purple/30 rounded-lg p-4">
+          <h4 className="font-semibold text-accent-purple-light mb-1">3. Risk Checks and Execution</h4>
+          <p className="text-sm text-text-secondary">
             Before any trade is placed, the signal passes through safety checks (risk rules).
             If the trade is too risky — for example, if you have already lost too much today, or
             the strategy is not confident enough — the trade is blocked. If it passes all checks,
@@ -212,12 +212,12 @@ function StrategyExplainer({
   example: string;
 }) {
   return (
-    <div className="border border-gray-200 rounded-lg p-4">
-      <h4 className="font-semibold text-gray-900 mb-2">
+    <div className="border border-navy-600 rounded-lg p-4">
+      <h4 className="font-semibold text-text-primary mb-2">
         {emoji} {name}
       </h4>
-      <p className="text-sm text-gray-700 mb-2">{simple}</p>
-      <p className="text-xs text-gray-500 italic">Example: {example}</p>
+      <p className="text-sm text-text-secondary mb-2">{simple}</p>
+      <p className="text-xs text-text-secondary italic">Example: {example}</p>
     </div>
   );
 }
@@ -267,9 +267,9 @@ function PagesSection() {
 
 function PageExplainer({ name, description }: { name: string; description: string }) {
   return (
-    <div className="border-l-4 border-blue-400 pl-4 py-1">
-      <h4 className="font-semibold text-gray-900 text-sm">{name}</h4>
-      <p className="text-sm text-gray-600">{description}</p>
+    <div className="border-l-4 border-accent-purple pl-4 py-1">
+      <h4 className="font-semibold text-text-primary text-sm">{name}</h4>
+      <p className="text-sm text-text-secondary">{description}</p>
     </div>
   );
 }
@@ -311,7 +311,7 @@ function SafetySection() {
         />
       </div>
 
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800 mt-4">
+      <div className="bg-loss/10 border border-loss/30 rounded-lg p-4 text-sm text-loss mt-4">
         <strong>Emergency Halt:</strong> If anything goes wrong, go to the Risk Settings page and
         hit the red &quot;Halt Trading&quot; button. This immediately stops all new orders. Your existing
         positions stay open — you would need to sell those manually through Alpaca if needed.
@@ -323,12 +323,12 @@ function SafetySection() {
 function RuleExplainer({ rule, explanation }: { rule: string; explanation: string }) {
   return (
     <div className="flex gap-3 items-start">
-      <span className="shrink-0 w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs mt-0.5">
+      <span className="shrink-0 w-5 h-5 rounded-full bg-gain/15 text-gain flex items-center justify-center text-xs mt-0.5">
         ✓
       </span>
       <div>
-        <span className="text-sm font-medium text-gray-900">{rule}</span>
-        <p className="text-sm text-gray-600">{explanation}</p>
+        <span className="text-sm font-medium text-text-primary">{rule}</span>
+        <p className="text-sm text-text-secondary">{explanation}</p>
       </div>
     </div>
   );
@@ -340,7 +340,7 @@ function GlossarySection() {
       <SectionTitle>Glossary</SectionTitle>
       <P>Quick reference for terms you will see throughout the dashboard.</P>
 
-      <div className="space-y-0 divide-y divide-gray-100">
+      <div className="space-y-0 divide-y divide-navy-600">
         <Term term="Bar" definition="A snapshot of a stock's price over a time period (e.g., 5 minutes). Includes the opening price, highest price, lowest price, closing price, and volume (number of shares traded)." />
         <Term term="Backtest" definition="Running a strategy against historical data to see how it would have performed in the past. Not a guarantee of future results, but useful for comparing strategies." />
         <Term term="Bollinger Bands" definition="Lines drawn above and below a stock's average price. When the price touches the lower band, it may be oversold. When it touches the upper band, it may be overbought. The '%B' value tells you where the price is between the bands (0 = lower band, 1 = upper band)." />
@@ -376,8 +376,8 @@ function GlossarySection() {
 function Term({ term, definition }: { term: string; definition: string }) {
   return (
     <div className="py-3">
-      <dt className="text-sm font-semibold text-gray-900">{term}</dt>
-      <dd className="text-sm text-gray-600 mt-0.5">{definition}</dd>
+      <dt className="text-sm font-semibold text-text-primary">{term}</dt>
+      <dd className="text-sm text-text-secondary mt-0.5">{definition}</dd>
     </div>
   );
 }

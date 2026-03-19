@@ -44,16 +44,35 @@ def _fetch_alpaca(symbol: str, limit: int) -> list[dict[str, Any]]:
 
         client = NewsClient(api_key=api_key, secret_key=secret_key)
         request = NewsRequest(symbols=symbol, limit=limit, sort="desc")
-        news = client.get_news(request)
+        result = client.get_news(request)
+
+        # Handle both old (.news) and new (.data["news"]) SDK structures
+        if hasattr(result, "data") and isinstance(result.data, dict):
+            news_items = result.data.get("news", [])
+        elif hasattr(result, "news"):
+            news_items = result.news
+        else:
+            news_items = []
 
         articles = []
-        for item in news.news:
+        for item in news_items:
+            # Extract thumbnail from Alpaca images array
+            thumbnail = None
+            images = getattr(item, "images", None)
+            if images:
+                for img in images:
+                    url = getattr(img, "url", None) or (img.get("url") if isinstance(img, dict) else None)
+                    if url:
+                        thumbnail = url
+                        break
+
             articles.append({
                 "headline": item.headline,
                 "summary": getattr(item, "summary", None) or "",
                 "source": getattr(item, "source", None) or "",
                 "url": getattr(item, "url", None) or "",
                 "published_at": str(item.created_at) if item.created_at else None,
+                "thumbnail_url": thumbnail,
             })
         return articles
     except Exception:
@@ -70,12 +89,16 @@ def _fetch_yfinance(symbol: str, limit: int) -> list[dict[str, Any]]:
 
         articles = []
         for item in raw_news[:limit]:
+            thumbnail = None
+            if item.get("thumbnail") and item["thumbnail"].get("resolutions"):
+                thumbnail = item["thumbnail"]["resolutions"][0].get("url")
             articles.append({
                 "headline": item.get("title", ""),
                 "summary": item.get("summary", "") or "",
                 "source": item.get("publisher", "") or "",
                 "url": item.get("link", "") or "",
                 "published_at": None,
+                "thumbnail_url": thumbnail,
             })
         return articles
     except Exception:

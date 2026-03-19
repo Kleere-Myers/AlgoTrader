@@ -9,6 +9,8 @@ explicitly asked, and you flag any change that touches a shared contract first.
 You are a read-only consumer of both backend services.
 You never write to DuckDB directly. All data comes through the service APIs.
 
+**Before making ANY UI changes, run `/styling` to load the design system reference.**
+
 ---
 
 ## Your Service at a Glance
@@ -16,9 +18,26 @@ You never write to DuckDB directly. All data comes through the service APIs.
 - **Framework:** Next.js 14 (App Router)
 - **Language:** TypeScript
 - **Port:** 3000
-- **Styling:** Tailwind CSS (no external component library required)
+- **Styling:** Tailwind CSS — Yahoo Finance dark mode theme
 - **Charts:** Recharts
 - **Real-time:** Server-Sent Events from execution-engine `/stream/events`
+- **Layout:** Top navbar (no sidebar), full-width content
+
+---
+
+## Design System
+
+The dashboard uses a **Yahoo Finance dark mode** design language.
+Full reference is in `.claude/commands/styling.md` (the `/styling` skill).
+
+Key rules:
+- Body: `bg-navy-950` (#101518)
+- Cards: `bg-navy-900` with `border border-navy-600 rounded-lg`
+- Text: `text-text-primary` (#f0f3f5) and `text-text-secondary` (#b0b9c1)
+- Gain/Loss: `text-gain` (#21d87d) / `text-loss` (#fc7a6e) — softer dark-mode variants
+- Accent: `bg-accent-purple` (#9d61ff), links use `accent-blue` (#12a9ff)
+- Font: Helvetica Neue, antialiased
+- NEVER use raw `text-gray-*` classes or light backgrounds
 
 ---
 
@@ -30,11 +49,11 @@ You never write to DuckDB directly. All data comes through the service APIs.
     "next": "14.x",
     "react": "18.x",
     "react-dom": "18.x",
-    "recharts": "^2.x",
-    "tailwindcss": "^3.x"
+    "recharts": "^2.x"
   },
   "devDependencies": {
     "typescript": "^5.x",
+    "tailwindcss": "^3.x",
     "@types/react": "^18.x",
     "@types/node": "^20.x"
   }
@@ -50,169 +69,21 @@ NEXT_PUBLIC_EXECUTION_URL=http://localhost:8080
 NEXT_PUBLIC_STRATEGY_URL=http://localhost:8000
 ```
 
-Both are browser-accessible (NEXT_PUBLIC_). No server-side proxying needed for
-localhost development. When migrating to cloud, update these to point to deployed
-service URLs.
-
 ---
 
 ## Page Map
 
 | Route | Page | Key Data Sources |
 |---|---|---|
-| `/` | Overview | GET /account, GET /positions, SSE /stream/events |
+| `/` | Overview | Market indices, sectors, P&L history, movers, news feed |
+| `/watchlist` | Watchlist | GET /company/{symbol}, GET /news/{symbol} |
 | `/positions` | Positions | GET /positions (execution), SSE for live updates |
 | `/orders` | Orders | GET /orders (execution) |
 | `/strategies` | Strategies | GET /strategies (strategy), POST /backtest triggers |
-| `/backtest` | Backtest Results | GET /backtest/{strategy}/{symbol} (strategy) |
-| `/risk` | Risk Settings | GET /account, POST /trading/halt, POST /trading/resume |
-| `/logs` | Live Logs | SSE /stream/events — show raw event stream |
-
----
-
-## Shared Types (types/index.ts)
-
-Define these TypeScript types to match the backend contracts exactly.
-**Never change these without flagging it — they mirror Rust and Python structs.**
-
-```typescript
-export type Direction = "BUY" | "SELL" | "HOLD";
-
-export interface Signal {
-  symbol: string;
-  direction: Direction;
-  confidence: number;        // 0.0 to 1.0
-  reason: string;
-  strategy_name: string;
-  timestamp: string;         // ISO 8601 UTC
-}
-
-export interface Position {
-  symbol: string;
-  qty: number;
-  avg_entry_price: number;
-  current_price: number;
-  unrealized_pnl: number;
-  opened_at: string;
-}
-
-export interface Order {
-  order_id: string;
-  alpaca_id: string | null;
-  symbol: string;
-  side: "buy" | "sell";
-  qty: number;
-  filled_price: number | null;
-  status: string;
-  strategy_name: string;
-  submitted_at: string;
-  filled_at: string | null;
-}
-
-export type SseEventType =
-  | "PositionUpdate"
-  | "OrderFill"
-  | "TradingHalted"
-  | "TradingResumed"
-  | "DailyPnl"
-  | "RiskBreach";
-
-export interface SseEvent {
-  event_type: SseEventType;
-  timestamp: string;
-  payload: Record<string, unknown>;
-}
-
-export interface AccountInfo {
-  equity: number;
-  buying_power: number;
-  cash: number;
-  currency: string;
-  status: string;
-  mode: string;
-  trading_blocked: boolean;
-}
-
-export interface Strategy {
-  id: string;
-  name: string;
-  enabled: boolean;
-  params: Record<string, unknown>;
-  last_signal: Signal | null;
-  win_rate: number | null;
-}
-
-export interface BacktestResult {
-  strategy_name: string;
-  symbol: string;
-  total_return_pct: number;
-  sharpe_ratio: number;
-  max_drawdown_pct: number;
-  win_rate: number;
-  total_trades: number;
-  avg_trade_duration_mins: number;
-  profit_factor: number;
-  period_start: string;
-  period_end: string;
-}
-```
-
----
-
-## SSE Hook (hooks/useSseEvents.ts)
-
-Create a reusable hook for subscribing to the execution engine SSE stream:
-
-```typescript
-// Usage: const { events, isConnected, isTradingHalted } = useSseEvents()
-// Reconnects automatically on disconnect
-// Exposes isTradingHalted derived from TradingHalted/TradingResumed events
-```
-
-The SSE stream must be consumed in a Client Component (`"use client"`).
-Keep the SSE connection at a high level (e.g. layout) so it persists across
-page navigation without reconnecting.
-
----
-
-## Component Specs
-
-### RiskStatusBar
-- Persistent top-of-page banner
-- Shows: daily P&L used vs limit as a progress bar
-- Color: green → yellow → red as loss approaches limit
-- When `trading_halted = true`: shows red banner "TRADING HALTED"
-- Always visible regardless of current page
-
-### EquityCurveChart
-- Recharts `LineChart`
-- X axis: timestamps, Y axis: account equity in dollars
-- Show a dotted reference line at starting equity
-- Tooltip shows exact equity and % change from start
-
-### CandlestickChart
-- Recharts `ComposedChart` with custom candlestick rendering
-- Overlay BUY signals as green upward triangles
-- Overlay SELL signals as red downward triangles
-- Show volume bars at bottom in secondary Y axis
-
-### PositionsTable
-- Sortable by symbol, P&L, duration
-- Unrealized P&L column: green text if positive, red if negative
-- Duration column: show as "2h 14m" format
-- Updates in real-time via SSE PositionUpdate events
-
-### StrategyCard
-- Shows: strategy name, enabled toggle, last signal direction + confidence badge
-- Win rate badge: color-coded (green >55%, yellow 45-55%, red <45%)
-- "Run Backtest" button: calls POST /backtest/{strategy}/{symbol}, shows loading state
-- Params section: expandable, shows current params as editable key-value pairs
-
-### EmergencyHaltButton
-- Large red button on the /risk page
-- Calls POST /trading/halt or POST /trading/resume depending on current state
-- Shows confirmation dialog before halting
-- Disabled during market-closed hours (grey out, tooltip explains why)
+| `/backtest` | Backtest | GET /backtest/{strategy}/{symbol} (strategy) |
+| `/risk` | Risk Settings | GET/PATCH /risk/config, trading halt/resume |
+| `/logs` | Live Logs | SSE /stream/events — raw event stream |
+| `/guide` | User Guide | Static content, no API calls |
 
 ---
 
@@ -221,104 +92,90 @@ page navigation without reconnecting.
 ```
 dashboard/
   app/
-    layout.tsx          # Root layout — includes RiskStatusBar, SSE provider
-    page.tsx            # Overview page (/)
-    positions/
-      page.tsx
-    orders/
-      page.tsx
-    strategies/
-      page.tsx
-    backtest/
-      page.tsx
-    risk/
-      page.tsx
-    logs/
-      page.tsx
+    layout.tsx          # Root layout — Navbar, bg-navy-950 body
+    globals.css         # CSS vars, scrollbar, input, recharts overrides
+    page.tsx            # Overview (markets, sectors, P&L, movers, news)
+    watchlist/page.tsx
+    positions/page.tsx
+    orders/page.tsx
+    strategies/page.tsx
+    backtest/page.tsx
+    risk/page.tsx
+    logs/page.tsx
+    guide/page.tsx
   components/
-    RiskStatusBar.tsx   # "use client" — reads SSE state
-    EquityCurveChart.tsx
-    CandlestickChart.tsx
-    PositionsTable.tsx  # "use client" — real-time updates
-    StrategyCard.tsx    # "use client" — toggle, backtest button
-    EmergencyHaltButton.tsx  # "use client"
+    Navbar.tsx              # Top nav bar with active state
+    MarketIndexCard.tsx     # Compact market card with directional arrow
+    SparklineChart.tsx      # Minimal recharts line (no axes)
+    SectorPerformanceBar.tsx # Horizontal bar chart for sectors
+    PnlChart.tsx            # Area chart with 1D/1W/1M/3M/YTD tabs
+    PortfolioSummary.tsx    # Financial breakdown sidebar
+    MoversList.tsx          # Tabbed gainers/losers list
+    NewsCard.tsx            # Editorial news card with thumbnail
+    CandlestickChart.tsx    # OHLCV candlestick with signal overlay
+    EquityCurveChart.tsx    # Backtest equity line chart
+    StrategyCard.tsx        # Strategy toggle/params/backtest card
+    WatchlistCard.tsx       # Company info + news sentiment card
+    EmergencyHaltButton.tsx # Trading halt control with confirmation
+    Tip.tsx                 # Portal-based tooltip
   hooks/
-    useSseEvents.ts     # "use client" hook
-    usePositions.ts
-    useOrders.ts
-    useStrategies.ts
+    useSseEvents.ts     # SSE stream with auto-reconnect
+    useSymbols.ts       # Symbol list management
   lib/
     api.ts              # Typed fetch wrappers for both service APIs
   types/
-    index.ts            # All shared TypeScript types (see above)
+    index.ts            # All shared TypeScript types
 ```
+
+---
+
+## Shared Types (types/index.ts)
+
+**Never change these without flagging it — they mirror Rust and Python structs.**
+
+Key types: `Signal`, `Position`, `Order`, `SseEvent`, `AccountInfo`, `Strategy`,
+`BacktestResult`, `RiskConfig`, `CompanyInfo`, `NewsArticle`, `OhlcvBar`
+
+Added for dashboard redesign: `TradeType`, `MarketIndex`, `SectorPerformance`,
+`MarketMover`, `PortfolioPnlHistory`
 
 ---
 
 ## API Client (lib/api.ts)
 
-Create typed fetch wrappers. Never call fetch directly in page/component files.
+All API calls go through typed wrappers. Never call fetch directly in pages.
 
-```typescript
-// All functions return typed responses or throw on error
-export const executionApi = {
-  getPositions: (): Promise<Position[]>
-  getOrders: (): Promise<Order[]>
-  getAccount: (): Promise<AccountInfo>
-  haltTrading: (): Promise<void>
-  resumeTrading: (): Promise<void>
-}
+**executionApi** (port 8080):
+- `getAccount()`, `getPositions()`, `getOrders()`
+- `haltTrading()`, `resumeTrading()`
+- `getRiskConfig()`, `patchRiskConfig(patch)`
+- `sseUrl` for SSE stream
 
-export const strategyApi = {
-  getStrategies: (): Promise<Strategy[]>
-  updateStrategy: (id: string, patch: Partial<Strategy>): Promise<Strategy>
-  triggerBacktest: (strategy: string, symbol: string): Promise<BacktestResult>
-  getBacktestResult: (strategy: string, symbol: string): Promise<BacktestResult>
-}
-```
+**strategyApi** (port 8000):
+- `getSymbols()`, `addSymbol()`, `removeSymbol()`
+- `getStrategies()`, `triggerBacktest()`, `getBacktestResult()`
+- `getBars()`, `getCompanyInfo()`, `getNews()`
+- `getMarketIndices()`, `getSectorPerformance()`
+- `getMarketMovers()`, `getPnlHistory(range)`
+- `getNewsFeed(limit)`
 
 ---
 
-## Rendering Strategy
+## Recharts Dark Theme
 
-Use React Server Components (RSC) for initial data fetching on page load.
-Use Client Components (`"use client"`) only where real-time interactivity is needed:
-- Anything that subscribes to SSE
-- Anything with user input (toggles, buttons, editable params)
-- Anything that needs to re-render on SSE events
-
-Pages that are mostly static (orders history, backtest results) can be RSC with
-a manual refresh button rather than live polling.
-
----
-
-## Styling Guidelines
-
-- Use Tailwind utility classes only — no custom CSS files unless absolutely necessary
-- Color palette: dark navy sidebar, white content area, blue accents (`blue-600`)
-- P&L positive: `text-green-600`, P&L negative: `text-red-600`
-- Trading halted state: `bg-red-100 border-red-500` banner
-- Paper mode indicator: subtle yellow badge in the nav ("PAPER MODE")
-- Live mode indicator: subtle green badge in the nav ("LIVE MODE")
-- Always show which mode is active so there's never ambiguity
-
----
-
-## Testing Requirements
-
-- Component tests using React Testing Library for key components
-- Test PositionsTable renders correctly with mock position data
-- Test RiskStatusBar shows halted state correctly
-- Test EmergencyHaltButton shows confirmation dialog before calling API
-- Test useSseEvents hook reconnects on disconnect
-- Run tests: `npm test`
+Recharts cannot use Tailwind classes — use inline hex values:
+- Grid: `stroke="#3a434c"`, `vertical={false}`
+- Axis ticks: `fill="#b0b9c1"`, `axisLine={false}`, `tickLine={false}`
+- Tooltip bg: `#232a31`, border: `#3a434c`
+- Gain stroke: `#21d87d`, Loss stroke: `#fc7a6e`, Accent: `#9d61ff`
 
 ---
 
 ## What to Flag Before Doing
 
-- Any change to the TypeScript types in `types/index.ts`
-- Any change to the SSE event format expected by `useSseEvents.ts`
-- Any addition of a new page that requires a new API endpoint
-- Any new dependency over 50KB that could affect bundle size
+- Any change to `types/index.ts` (mirrors Rust/Python structs)
+- Any change to SSE event format in `useSseEvents.ts`
+- Any new page requiring a new backend API endpoint
+- Any new dependency over 50KB
 - Any attempt to write data directly to DuckDB or call Alpaca directly
+- Any deviation from the Yahoo Finance dark theme (run `/styling` first)

@@ -1,177 +1,184 @@
-# AlgoTrader Personal
+# AlgoTrader
 
-A self-hosted automated trading system for day trading US equities and ETFs. Built with Python, Rust, and Next.js. Trades through [Alpaca Markets](https://alpaca.markets/) paper or live accounts.
-
-**For personal use only. Not licensed for distribution.**
+A self-hosted automated trading system for day trading and swing trading US equities and ETFs. Three-service architecture built with Python, Rust, and TypeScript — developed end-to-end using agentic AI workflows with [Claude Code](https://claude.ai/claude-code).
 
 ## Architecture
 
-Three independently running services communicate over localhost HTTP:
+| Service | Language | Framework | Port | Purpose |
+|---|---|---|---|---|
+| `strategy-engine/` | Python 3.12 | FastAPI | 9100 | Signal generation, market data, ML/NLP pipelines |
+| `execution-engine/` | Rust | Axum | 9101 | Order routing, risk enforcement, WebSocket feeds |
+| `dashboard/` | TypeScript | Next.js 14 | 9102 | Real-time monitoring dashboard |
 
-| Service | Stack | Port | Responsibility |
-|---|---|---|---|
-| **Strategy Engine** | Python 3.12 + FastAPI | 8000 | Signal generation, backtesting, ML models |
-| **Execution Engine** | Rust + Axum | 8080 | Order routing, risk enforcement, WebSocket feeds, position tracking |
-| **Dashboard** | Next.js 14 + Tailwind | 3000 | Real-time monitoring, strategy config, P&L visualization |
+Services communicate via REST APIs, WebSocket (market data), and SSE (live position/order updates). DuckDB serves as the shared analytics database.
 
 ```
-Alpaca WebSocket ──> Execution Engine ──> Strategy Engine
-                          │                     │
-                          │ <── signals ─────────┘
-                          │
-                          ├──> Risk Checks ──> Alpaca Orders
-                          ├──> DuckDB (shared)
-                          └──> SSE Stream ──> Dashboard
+┌─────────────────┐     Signals (REST)      ┌──────────────────┐
+│ Strategy Engine  │ ──────────────────────► │ Execution Engine │
+│  Python/FastAPI  │                         │    Rust/Axum     │
+│                  │◄── Bar Data (DuckDB) ──►│                  │
+└────────┬────────┘                         └────────┬─────────┘
+         │                                           │
+         │  Market Data APIs                         │  SSE Events
+         │  (REST)                                   │  (positions, orders, P&L)
+         │                                           │
+         └──────────────┐           ┌────────────────┘
+                        ▼           ▼
+                   ┌─────────────────────┐
+                   │     Dashboard       │
+                   │   Next.js 14 / SSE  │
+                   └─────────────────────┘
 ```
 
-## Strategies
+## Trading Strategies
 
-Four trading strategies run on every incoming bar, all extending `BaseStrategy`:
+### Day Trading (7 strategies)
 
-| Strategy | Logic | Default Params |
+| Strategy | Type | Description |
 |---|---|---|
-| **MovingAverageCrossover** | BUY on fast SMA crossing above slow SMA | fast=10, slow=30 |
-| **RSIMeanReversion** | BUY when RSI crosses below oversold threshold | period=14, oversold=30, overbought=70 |
-| **MomentumVolume** | BUY on price breakout above 20-bar high with volume confirmation | lookback=20, vol_mult=1.5 |
-| **MLSignalGenerator** | LightGBM classifier trained on technical features | min_confidence=0.65, retrain=weekly |
+| MovingAverageCrossover | Technical | Fast/slow MA crossover signals |
+| RSIMeanReversion | Technical | RSI oversold/overbought reversals |
+| MomentumVolume | Technical | Price momentum confirmed by volume |
+| VWAPStrategy | Technical | VWAP deviation mean reversion |
+| OpeningRangeBreakout | Technical | First 30-min range breakout |
+| MLSignalGenerator | ML | LightGBM classifier on technical features |
+| NewsSentimentStrategy | NLP | FinBERT sentiment analysis on live news |
+
+### Swing Trading (2 strategies)
+
+| Strategy | Type | Description |
+|---|---|---|
+| MultiTimeframeTrend | Technical | Weekly EMA trend + daily RSI pullback entries |
+| RelativeStrength | Technical | RS ranking vs SPY benchmark |
+
+A **CompositeScorer** aggregates weighted signals from multiple strategies into a single conviction score for swing trade entries.
 
 ## Risk Management
 
-Enforced in Rust before any order reaches Alpaca. Non-negotiable.
+Risk enforcement is implemented in Rust (`execution-engine/src/risk.rs`) and runs before every order submission:
 
-| Rule | Default | On Breach |
-|---|---|---|
-| Max daily loss | 2% of equity | Halt all trading |
-| Max position size | 10% of equity per symbol | Reject signal |
-| Max open positions | 4 | Reject signal |
-| Min signal confidence | 0.60 | Reject signal |
-| Order throttle | 5 min per symbol | Throttle |
-| EOD flatten | 3:45 PM ET | Market-sell all positions |
+- Maximum daily loss limits
+- Per-position size constraints
+- Trade frequency throttling
+- Automatic EOD position flattening at 3:45 PM ET (day trades only; swing positions exempt)
+- All orders must pass risk validation before reaching the Alpaca API
+
+## Dashboard
+
+Yahoo Finance-inspired dark theme with real-time data.
+
+**Pages:** Overview, Watchlist, Positions, Orders, Strategies, Backtest, Risk, Logs, Guide, Quote (per-symbol)
+
+**Overview** features a markets carousel (10 indices/commodities/crypto), sector performance bars, portfolio P&L chart with range tabs, top movers, and a news feed with sentiment badges.
+
+**Quote pages** (`/quote/[symbol]`) provide interactive candlestick/line charts, key statistics (14 metrics), company profiles, and symbol-specific news with sentiment.
+
+**Positions** update in real-time via SSE with live prices during extended hours (4 AM - 8 PM ET).
+
+## Tech Stack
+
+**AI/ML:** LightGBM (signal classification), FinBERT/ProsusAI (news sentiment), Claude Code + MCP (development)
+
+**Backend:** Python 3.12, FastAPI, Rust, Axum, DuckDB
+
+**Frontend:** Next.js 14, Tailwind CSS, Recharts, SSE
+
+**Integrations:** Alpaca Markets (trading + news), Yahoo Finance, yfinance
+
+## Prerequisites
+
+- Python 3.12+
+- Rust (stable)
+- Node.js 22+
+- [Alpaca Markets](https://alpaca.markets/) paper trading account
+
+## Setup
+
+1. **Clone and configure environment:**
+
+```bash
+git clone https://github.com/Kleere-Myers/AlgoTrader.git
+cd AlgoTrader
+cp .env.example .env
+# Edit .env with your Alpaca API keys
+```
+
+2. **Initialize the database:**
+
+```bash
+python scripts/init_db.py
+```
+
+3. **Start the strategy engine:**
+
+```bash
+cd strategy-engine
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 9100
+```
+
+4. **Start the execution engine:**
+
+```bash
+cd execution-engine
+cargo run --release
+```
+
+5. **Start the dashboard:**
+
+```bash
+cd dashboard
+npm install
+npm run dev
+```
+
+The dashboard will be available at `http://localhost:9102`.
+
+## Environment Variables
+
+```
+ALPACA_API_KEY=           # Alpaca paper trading API key
+ALPACA_SECRET_KEY=        # Alpaca paper trading secret key
+ALPACA_MODE=paper         # paper or live
+STRATEGY_ENGINE_URL=http://localhost:9100
+EXECUTION_ENGINE_URL=http://localhost:9101
+DUCKDB_PATH=../data/algotrader.duckdb
+NEXT_PUBLIC_EXECUTION_URL=http://localhost:9101
+NEXT_PUBLIC_STRATEGY_URL=http://localhost:9100
+```
+
+## Tests
+
+```bash
+# Strategy engine (160 tests)
+cd strategy-engine && python -m pytest
+
+# Execution engine (34 tests)
+cd execution-engine && cargo test
+
+# Dashboard (10 route tests)
+cd dashboard && npm test
+```
+
+**Total: 204 tests** across all three services.
 
 ## Instrument Universe
 
-SPY, QQQ, AAPL, MSFT, NVDA, GOOGL — regular session only (9:30 AM - 4:00 PM ET).
+**Core:** SPY, QQQ, AAPL, MSFT, NVDA, GOOGL
+**AI Energy:** CEG, GEV, VST, NEE, BE, CCJ, OKLO, LEU, EVRG, PEG, FE, ED
 
-## Quick Start
+Regular session: 9:30 AM - 4:00 PM ET. Day positions auto-closed by 3:45 PM ET. Swing positions are exempt from EOD flatten.
 
-### Prerequisites
+## Built With Claude Code
 
-- Python 3.12+
-- Rust (stable toolchain)
-- Node.js 18+
-- [Alpaca Markets](https://alpaca.markets/) account (paper trading)
+This project was built using agentic AI development with [Claude Code](https://claude.ai/claude-code). The multi-agent architecture is defined in `CLAUDE.md` and `AGENT_*.md` files, which coordinate autonomous AI workflows across all three services using shared contracts, structured prompts, and governance rules via MCP (Model Context Protocol).
 
-### Setup
+## Disclaimer
 
-```bash
-# Clone and enter project
-git clone https://github.com/Kleere-Myers/AlgoTrader.git
-cd AlgoTrader
+This is a personal project for educational and experimental purposes. It is configured for **paper trading only** by default. Use at your own risk. Not financial advice.
 
-# Create .env from template
-cp .env.example .env
-# Edit .env with your Alpaca API keys
+## License
 
-# Python setup
-python3 -m venv .venv
-.venv/bin/pip install -r strategy-engine/requirements.txt
-
-# Initialize database and ingest historical data
-.venv/bin/python scripts/init_db.py
-.venv/bin/python scripts/ingest_historical.py
-
-# Rust build
-cd execution-engine && cargo build && cd ..
-
-# Dashboard setup
-cd dashboard && npm install && cd ..
-```
-
-### Verify Alpaca Connection
-
-```bash
-cd execution-engine && cargo run -- --check-auth
-```
-
-### Start All Services
-
-```bash
-# Terminal 1 — Strategy Engine
-cd strategy-engine && ../.venv/bin/uvicorn main:app --port 8000
-
-# Terminal 2 — Execution Engine
-cd execution-engine && RUST_LOG=info cargo run
-
-# Terminal 3 — Dashboard
-cd dashboard && npm run dev
-```
-
-Open http://localhost:9102 to view the dashboard.
-
-### Run Tests
-
-```bash
-# Rust (26 tests — risk rules, EOD scheduler, risk config API)
-cd execution-engine && cargo test
-
-# Python (72 tests — 4 strategies, ML features, performance endpoint)
-cd strategy-engine && ../.venv/bin/python -m pytest tests/ -v
-
-# Dashboard (build check — all 7 routes)
-cd dashboard && npx next build
-```
-
-## Project Structure
-
-```
-algotrader/
-  strategy-engine/           # Python FastAPI service
-    strategies/              # One file per strategy plugin
-    ml/                      # ML feature pipeline and training
-    models/                  # Trained model artifacts (.pkl, gitignored)
-    tests/                   # pytest test suite
-    main.py                  # FastAPI app entrypoint
-  execution-engine/          # Rust Axum service
-    src/
-      main.rs                # Axum router, WebSocket ingestion, signal processing
-      alpaca.rs              # Alpaca REST + WebSocket client
-      risk.rs                # Risk rule enforcement (8 checks)
-      orders.rs              # Order submission to Alpaca
-      positions.rs           # In-memory position tracker
-      db.rs                  # DuckDB access layer
-      sse.rs                 # Server-Sent Events broadcaster
-      scheduler.rs           # EOD auto-flatten logic
-    Cargo.toml
-  dashboard/                 # Next.js 14 app
-    app/                     # App Router pages (7 routes)
-    components/              # StrategyCard, CandlestickChart, etc.
-    hooks/                   # useSseEvents SSE hook
-    lib/                     # Typed API client
-    types/                   # Shared TypeScript types
-  data/                      # DuckDB database file (gitignored)
-  scripts/                   # DB init, data ingestion, backtest runner
-  .env                       # API keys (gitignored)
-```
-
-## Database
-
-DuckDB with 6 tables: `ohlcv_bars`, `signals`, `orders`, `positions`, `daily_pnl`, `strategy_config`. Schema defined in `scripts/init_db.py`.
-
-## Dashboard Pages
-
-| Route | Page | Description |
-|---|---|---|
-| `/` | Overview | Equity stats, candlestick chart with signal overlays, open positions, SSE event feed |
-| `/positions` | Positions | Open positions with real-time P&L (green/red) via SSE |
-| `/orders` | Orders | Order history with status badges, strategy attribution |
-| `/strategies` | Strategies | Enable/disable, edit params, trigger backtests |
-| `/backtest` | Backtest | Equity curves (Recharts), metrics table, strategy/symbol filters |
-| `/risk` | Risk Settings | Editable thresholds, emergency halt button |
-| `/logs` | Logs | Color-coded SSE event stream with auto-scroll |
-
-## Important Notes
-
-- `ALPACA_MODE=paper` is the default. **Never switch to `live` without explicit intention.**
-- Risk rules in `risk.rs` are the last line of defense. Never make them more permissive without review.
-- API keys come from environment variables only. Never hardcode.
-- The ML model is currently trained on daily bars (59.4% accuracy baseline). It will improve as intraday data accumulates from the live WebSocket feed.
+All rights reserved. Not licensed for distribution.

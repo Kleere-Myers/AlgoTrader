@@ -51,11 +51,11 @@ export default function WatchlistCard({ symbol, company, news }: WatchlistCardPr
   }
 
   return (
-    <div className="rounded-lg border border-navy-600 bg-navy-900 p-4 flex flex-col">
+    <div className="rounded-lg border border-surface-600 bg-surface-900 p-4 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <div>
-          <Link href={`/quote/${symbol}`} className="font-bold text-base text-text-primary hover:text-accent-purple-light transition-colors">{symbol}</Link>
+          <Link href={`/quote/${symbol}`} className="font-bold text-base text-text-primary hover:text-accent-light transition-colors">{symbol}</Link>
           {company?.name && company.name !== symbol && (
             <span className="text-xs text-text-secondary ml-2">{company.name}</span>
           )}
@@ -81,13 +81,13 @@ export default function WatchlistCard({ symbol, company, news }: WatchlistCardPr
       {/* Tags */}
       <div className="flex flex-wrap gap-1.5 mb-3">
         {company?.sector && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-purple/15 text-accent-purple-light">{company.sector}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent-light">{company.sector}</span>
         )}
         {company?.industry && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-purple/10 text-accent-purple-light">{company.industry}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent-light">{company.industry}</span>
         )}
         {company?.market_cap != null && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-navy-600 text-text-secondary">
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-600 text-text-secondary">
             {formatMarketCap(company.market_cap)}
           </span>
         )}
@@ -101,13 +101,13 @@ export default function WatchlistCard({ symbol, company, news }: WatchlistCardPr
             <span className="text-text-secondary text-[10px]">52W Range</span>
             <span>${high52.toFixed(2)}</span>
           </div>
-          <div className="h-1.5 bg-navy-600 rounded-full relative">
+          <div className="h-1.5 bg-surface-600 rounded-full relative">
             <div
-              className="absolute top-0 left-0 h-full bg-accent-purple rounded-full"
+              className="absolute top-0 left-0 h-full bg-accent rounded-full"
               style={{ width: `${rangePosition}%` }}
             />
             <div
-              className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-accent-purple rounded-full border-2 border-navy-900 shadow"
+              className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-accent rounded-full border-2 border-surface-900 shadow"
               style={{ left: `${rangePosition}%`, marginLeft: "-5px" }}
             />
           </div>
@@ -127,7 +127,7 @@ export default function WatchlistCard({ symbol, company, news }: WatchlistCardPr
                       href={article.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-text-secondary hover:text-accent-purple-light line-clamp-2 leading-snug"
+                      className="text-xs text-text-secondary hover:text-accent-light line-clamp-2 leading-snug"
                     >
                       {article.headline}
                     </a>
@@ -149,13 +149,13 @@ export default function WatchlistCard({ symbol, company, news }: WatchlistCardPr
 
       {/* Summary */}
       {company?.summary && (
-        <div className="mt-3 pt-2 border-t border-navy-600">
+        <div className="mt-3 pt-2 border-t border-surface-600">
           <p className="text-[11px] text-text-secondary leading-relaxed">
             {expanded ? company.summary : company.summary.slice(0, 150)}
             {company.summary.length > 150 && (
               <button
                 onClick={() => setExpanded(!expanded)}
-                className="text-accent-purple hover:text-accent-purple-light ml-1"
+                className="text-accent hover:text-accent-light ml-1"
               >
                 {expanded ? "less" : "...more"}
               </button>

@@ -77,7 +77,7 @@ export default function BacktestPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold text-text-primary">Backtest Results</h2>
+          <h2 className="text-lg font-semibold text-text-primary">Backtest Results</h2>
           <p className="text-text-secondary text-sm mt-1">
             Equity curves, metrics, and performance comparison per strategy and symbol.
           </p>
@@ -85,7 +85,7 @@ export default function BacktestPage() {
         <button
           onClick={fetchData}
           disabled={loading}
-          className="text-xs px-3 py-1.5 rounded border border-navy-600 hover:bg-navy-700 text-text-secondary disabled:opacity-50"
+          className="text-xs px-3 py-1.5 rounded border border-surface-600 hover:bg-surface-700 text-text-secondary disabled:opacity-50"
         >
           {loading ? "Loading..." : "Refresh"}
         </button>
@@ -98,7 +98,7 @@ export default function BacktestPage() {
           <select
             value={selectedStrategy}
             onChange={(e) => setSelectedStrategy(e.target.value)}
-            className="text-sm border border-navy-600 bg-navy-900 text-text-primary rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent-blue"
+            className="text-sm border border-surface-600 bg-surface-900 text-text-primary rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent"
           >
             <option value="all">All Strategies</option>
             {strategyNames.map((name) => (
@@ -111,7 +111,7 @@ export default function BacktestPage() {
           <select
             value={selectedSymbol}
             onChange={(e) => setSelectedSymbol(e.target.value)}
-            className="text-sm border border-navy-600 bg-navy-900 text-text-primary rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent-blue"
+            className="text-sm border border-surface-600 bg-surface-900 text-text-primary rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent"
           >
             <option value="all">All Symbols</option>
             {SYMBOLS.map((sym) => (
@@ -125,7 +125,7 @@ export default function BacktestPage() {
       {filteredEquityKeys.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
           {filteredEquityKeys.map((key) => (
-            <div key={key} className="bg-navy-900 rounded-lg border border-navy-600 p-4">
+            <div key={key} className="bg-surface-900 rounded-lg border border-surface-600 p-4">
               <EquityCurveChart
                 data={equityData[key]}
                 label={key.replace(":", " \u2014 ")}
@@ -137,8 +137,8 @@ export default function BacktestPage() {
 
       {/* Metrics table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left border border-navy-600 bg-navy-900 rounded-lg">
-          <thead className="bg-navy-800 text-text-secondary uppercase text-xs">
+        <table className="w-full text-sm text-left border border-surface-600 bg-surface-900 rounded-lg">
+          <thead className="bg-surface-800 text-text-secondary uppercase text-xs">
             <tr>
               <th className="px-4 py-3">Strategy</th>
               <th className="px-4 py-3">Symbol</th>
@@ -151,7 +151,7 @@ export default function BacktestPage() {
               <th className="px-4 py-3 text-right">Profit Factor <Tip text="Total profits divided by total losses. Above 1.0 means profitable overall. Above 1.5 is good." inline /></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-navy-600">
+          <tbody className="divide-y divide-surface-600">
             {loading ? (
               <tr>
                 <td className="px-4 py-8 text-center text-text-secondary" colSpan={9}>
@@ -166,7 +166,7 @@ export default function BacktestPage() {
               </tr>
             ) : (
               filtered.map((r) => (
-                <tr key={`${r.strategy_name}-${r.symbol}`} className="hover:bg-navy-800">
+                <tr key={`${r.strategy_name}-${r.symbol}`} className="hover:bg-surface-800">
                   <td className="px-4 py-2.5 font-medium text-text-primary">{r.strategy_name}</td>
                   <td className="px-4 py-2.5 text-text-secondary">{r.symbol}</td>
                   <td className={`px-4 py-2.5 text-right ${r.total_return_pct >= 0 ? "text-gain" : "text-loss"}`}>

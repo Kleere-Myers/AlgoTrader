@@ -19,6 +19,7 @@ import PnlChart from "@/components/PnlChart";
 import PortfolioSummary from "@/components/PortfolioSummary";
 import MoversList from "@/components/MoversList";
 import NewsCard from "@/components/NewsCard";
+import TodaysTrades from "@/components/TodaysTrades";
 
 export default function OverviewPage() {
   const [indices, setIndices] = useState<MarketIndex[]>([]);
@@ -105,11 +106,11 @@ export default function OverviewPage() {
 
       {/* Markets Carousel */}
       <section className="mb-6">
-        <h2 className="text-lg font-semibold text-text-secondary mb-3">Markets</h2>
+        <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-3 uppercase tracking-widest">Markets</h2>
         <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
           {loading
             ? Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="bg-navy-800 rounded-lg min-w-[160px] h-[72px] animate-pulse flex-shrink-0" />
+                <div key={i} className="bg-surface-800 rounded-lg min-w-[160px] h-[72px] animate-pulse flex-shrink-0" />
               ))
             : indices.map((idx) => (
                 <MarketIndexCard key={idx.symbol} index={idx} />
@@ -117,17 +118,22 @@ export default function OverviewPage() {
         </div>
       </section>
 
+      {/* Today's Trades */}
+      <section className="mb-6">
+        <TodaysTrades />
+      </section>
+
       {/* Sectors + Watchlist */}
       <section className="mb-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {sectors.length > 0 && (
             <div>
-              <h2 className="text-sm font-semibold text-text-secondary mb-2">Sectors</h2>
+              <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-2 uppercase tracking-widest">Sectors</h2>
               <SectorPerformanceBar sectors={sectors} />
             </div>
           )}
           <div>
-            <h2 className="text-sm font-semibold text-text-secondary mb-2">Watchlist</h2>
+            <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-2 uppercase tracking-widest">Watchlist</h2>
             <WatchlistTable symbols={watchlist} loading={watchlistLoading} />
           </div>
         </div>
@@ -135,7 +141,7 @@ export default function OverviewPage() {
 
       {/* Portfolio P&L + Summary */}
       <section className="mb-6">
-        <h2 className="text-lg font-semibold text-text-secondary mb-3">Portfolio</h2>
+        <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-3 uppercase tracking-widest">Portfolio</h2>
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           <div className="lg:col-span-3">
             <PnlChart
@@ -156,11 +162,11 @@ export default function OverviewPage() {
       <section className="mb-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-text-secondary mb-3">Movers</h2>
+            <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-3 uppercase tracking-widest">Movers</h2>
             <MoversList gainers={movers.gainers} losers={movers.losers} />
           </div>
           <div className="lg:col-span-2">
-            <h2 className="text-lg font-semibold text-text-secondary mb-3">News</h2>
+            <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-3 uppercase tracking-widest">News</h2>
             <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
               {news.length === 0 && !loading && (
                 <p className="text-text-secondary text-sm">No news available</p>

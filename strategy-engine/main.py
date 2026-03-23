@@ -705,82 +705,113 @@ def get_market_movers():
 
 @app.get("/portfolio/pnl-history")
 def get_pnl_history(range: str = "1d"):
-    """Return portfolio P&L time series and summary for the given range."""
-    con = _get_db()
+    """Return portfolio P&L time series and summary for the given range.
+
+    Uses Alpaca's portfolio history API for real equity curve data.
+    """
+    import httpx
+
+    alpaca_key = os.environ.get("ALPACA_API_KEY", "")
+    alpaca_secret = os.environ.get("ALPACA_SECRET_KEY", "")
+    alpaca_mode = os.environ.get("ALPACA_MODE", "paper")
+    base_url = (
+        "https://api.alpaca.markets"
+        if alpaca_mode == "live"
+        else "https://paper-api.alpaca.markets"
+    )
+    headers = {
+        "APCA-API-KEY-ID": alpaca_key,
+        "APCA-API-SECRET-KEY": alpaca_secret,
+    }
+
+    exec_url = os.environ.get("EXECUTION_ENGINE_URL", "http://localhost:9101")
+
+    # Fetch account + positions from execution engine
     try:
-        # Get account info from execution engine
-        import httpx
-        exec_url = os.environ.get("EXECUTION_ENGINE_URL", "http://localhost:9101")
-        try:
-            resp = httpx.get(f"{exec_url}/account", timeout=5)
-            acct = resp.json() if resp.status_code == 200 else {}
-        except Exception:
-            acct = {}
+        acct = httpx.get(f"{exec_url}/account", timeout=5).json()
+    except Exception:
+        acct = {}
+    try:
+        positions = httpx.get(f"{exec_url}/positions", timeout=5).json()
+    except Exception:
+        positions = []
 
-        # Get positions
-        try:
-            resp = httpx.get(f"{exec_url}/positions", timeout=5)
-            positions = resp.json() if resp.status_code == 200 else []
-        except Exception:
-            positions = []
+    equity = acct.get("equity", 0)
+    buying_power = acct.get("buying_power", 0)
+    cash = acct.get("cash", 0)
+    day_positions = sum(1 for p in positions if p.get("trade_type", "day") == "day")
+    swing_positions = sum(1 for p in positions if p.get("trade_type") == "swing")
 
-        equity = acct.get("equity", 0)
-        buying_power = acct.get("buying_power", 0)
-        cash = acct.get("cash", 0)
+    # Map range to Alpaca portfolio history params
+    range_params = {
+        "1d":  {"period": "1D", "timeframe": "15Min", "intraday_reporting": "market_hours"},
+        "1w":  {"period": "1W", "timeframe": "1H"},
+        "1m":  {"period": "1M", "timeframe": "1D"},
+        "3m":  {"period": "3M", "timeframe": "1D"},
+        "ytd": {"period": "1A", "timeframe": "1D"},
+    }
+    params = range_params.get(range, range_params["1d"])
 
-        day_positions = sum(1 for p in positions if p.get("trade_type", "day") == "day")
-        swing_positions = sum(1 for p in positions if p.get("trade_type") == "swing")
+    # Fetch portfolio history from Alpaca
+    timestamps = []
+    equity_series = []
+    pnl_series = []
+    base_value = float(equity) or 100000
 
-        # Compute P&L history from daily_pnl table
-        range_map = {
-            "1d": "1 day", "1w": "7 days", "1m": "30 days",
-            "3m": "90 days", "ytd": "365 days",
-        }
-        interval = range_map.get(range, "1 day")
-        rows = con.execute(
-            f"SELECT date, realized_pnl, unrealized_pnl, account_equity "
-            f"FROM daily_pnl WHERE date >= current_date - INTERVAL '{interval}' "
-            f"ORDER BY date",
-        ).fetchall()
+    try:
+        resp = httpx.get(
+            f"{base_url}/v2/account/portfolio/history",
+            headers=headers,
+            params=params,
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            raw_ts = data.get("timestamp", [])
+            raw_eq = data.get("equity", [])
+            raw_pnl = data.get("profit_loss", [])
+            base_value = data.get("base_value", base_value)
 
-        timestamps = [str(r[0]) for r in rows]
-        equity_series = [float(r[3]) if r[3] else 0 for r in rows]
-        pnl_series = [float(r[1]) + float(r[2]) for r in rows]
+            from datetime import datetime, timezone
 
-        # If current day not in series, add it
-        if equity:
-            timestamps.append("now")
-            equity_series.append(float(equity))
-            total_pnl = sum(float(r[1]) for r in rows) if rows else 0
-            unrealized = sum(p.get("unrealized_pnl", 0) for p in positions)
-            pnl_series.append(total_pnl + unrealized)
+            for i, ts in enumerate(raw_ts):
+                if raw_eq[i] is None or raw_eq[i] == 0:
+                    continue
+                dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+                if range == "1d":
+                    timestamps.append(dt.strftime("%-I:%M %p"))
+                elif range == "1w":
+                    timestamps.append(dt.strftime("%b %-d %-I%p"))
+                else:
+                    timestamps.append(dt.strftime("%b %-d"))
+                equity_series.append(float(raw_eq[i]))
+                pnl_series.append(float(raw_pnl[i]) if raw_pnl[i] is not None else 0)
+    except Exception:
+        pass
 
-        start_equity = equity_series[0] if equity_series else float(equity) or 100000
-        period_pnl = float(equity) - start_equity if equity else 0
-        period_pnl_pct = (period_pnl / start_equity * 100) if start_equity else 0
+    # If empty, fall back to just current equity
+    if not equity_series and equity:
+        timestamps.append("Now")
+        equity_series.append(float(equity))
+        pnl_series.append(0)
 
-        # Win rate from orders
-        order_rows = con.execute(
-            "SELECT COUNT(*) FILTER (WHERE filled_price IS NOT NULL AND side = 'sell'), "
-            "COUNT(*) FILTER (WHERE filled_price IS NOT NULL) "
-            "FROM orders"
-        ).fetchone()
-        total_fills = order_rows[1] if order_rows else 0
-        win_rate = 0.0
+    start_equity = equity_series[0] if equity_series else base_value
+    current_equity = float(equity) if equity else (equity_series[-1] if equity_series else base_value)
+    period_pnl = current_equity - start_equity
+    period_pnl_pct = (period_pnl / start_equity * 100) if start_equity else 0
 
-        # Realized P&L
-        realized = con.execute(
-            "SELECT COALESCE(SUM(realized_pnl), 0) FROM daily_pnl"
-        ).fetchone()[0]
-    finally:
-        con.close()
+    # Realized P&L from Alpaca profit_loss sum
+    realized = sum(pnl_series) if pnl_series else 0
+
+    # Win rate placeholder
+    win_rate = 0.0
 
     return {
         "timestamps": timestamps,
         "equity": equity_series,
         "pnl": pnl_series,
         "summary": {
-            "total_equity": round(float(equity), 2) if equity else 0,
+            "total_equity": round(current_equity, 2),
             "period_pnl": round(period_pnl, 2),
             "period_pnl_pct": round(period_pnl_pct, 2),
             "realized_pnl": round(float(realized), 2),

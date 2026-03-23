@@ -23,7 +23,7 @@ function confidenceBadge(confidence: number) {
 }
 
 function winRateBadge(winRate: number | null) {
-  if (winRate === null) return <span className="text-xs px-2 py-0.5 rounded bg-navy-600 text-text-secondary">N/A</span>;
+  if (winRate === null) return <span className="text-xs px-2 py-0.5 rounded bg-surface-600 text-text-secondary">N/A</span>;
   const pct = (winRate * 100).toFixed(1);
   if (winRate > 0.55) return <span className="text-xs px-2 py-0.5 rounded bg-gain/15 text-gain">{pct}%</span>;
   if (winRate >= 0.45) return <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/15 text-yellow-500">{pct}%</span>;
@@ -34,10 +34,10 @@ function directionBadge(direction: string) {
   const colors: Record<string, string> = {
     BUY: "bg-gain/15 text-gain",
     SELL: "bg-loss/15 text-loss",
-    HOLD: "bg-navy-600 text-text-secondary",
+    HOLD: "bg-surface-600 text-text-secondary",
   };
   return (
-    <span className={`text-xs px-2 py-0.5 rounded font-medium ${colors[direction] || "bg-navy-600 text-text-secondary"}`}>
+    <span className={`text-xs px-2 py-0.5 rounded font-medium ${colors[direction] || "bg-surface-600 text-text-secondary"}`}>
       {direction}
     </span>
   );
@@ -107,7 +107,7 @@ export default function StrategyCard({ strategy, symbols, onUpdate, onBacktestCo
   const hasEdits = Object.keys(editedParams).length > 0;
 
   return (
-    <div className="rounded-lg border border-navy-600 bg-navy-900 p-5">
+    <div className="rounded-lg border border-surface-600 bg-surface-900 p-5">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold text-sm text-text-primary">
@@ -120,7 +120,7 @@ export default function StrategyCard({ strategy, symbols, onUpdate, onBacktestCo
           onClick={handleToggle}
           disabled={saving}
           className={`relative w-10 h-5 rounded-full transition-colors ${
-            strategy.enabled ? "bg-accent-purple" : "bg-navy-600"
+            strategy.enabled ? "bg-accent" : "bg-surface-600"
           }`}
         >
           <span
@@ -150,7 +150,7 @@ export default function StrategyCard({ strategy, symbols, onUpdate, onBacktestCo
       <div className="mb-3">
         <button
           onClick={() => setParamsExpanded(!paramsExpanded)}
-          className="text-xs text-accent-purple hover:text-accent-purple-light"
+          className="text-xs text-accent hover:text-accent-light"
         >
           {paramsExpanded ? "Hide Params" : "Edit Params"}
         </button>
@@ -165,7 +165,7 @@ export default function StrategyCard({ strategy, symbols, onUpdate, onBacktestCo
                   onChange={(e) =>
                     setEditedParams((prev) => ({ ...prev, [key]: e.target.value }))
                   }
-                  className="text-xs border border-navy-600 bg-navy-800 text-text-primary rounded px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-accent-blue"
+                  className="text-xs border border-surface-600 bg-surface-800 text-text-primary rounded px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-accent"
                 />
               </div>
             ))}
@@ -173,7 +173,7 @@ export default function StrategyCard({ strategy, symbols, onUpdate, onBacktestCo
               <button
                 onClick={handleParamSave}
                 disabled={saving}
-                className="text-xs px-3 py-1 mt-1 rounded bg-accent-purple text-white hover:bg-accent-purple-dark disabled:opacity-50"
+                className="text-xs px-3 py-1 mt-1 rounded bg-accent text-white hover:bg-accent-dark disabled:opacity-50"
               >
                 {saving ? "Saving..." : "Save Changes"}
               </button>
@@ -186,7 +186,7 @@ export default function StrategyCard({ strategy, symbols, onUpdate, onBacktestCo
       <button
         onClick={handleBacktest}
         disabled={backtesting}
-        className="text-xs px-3 py-1.5 rounded bg-accent-purple/15 text-accent-purple-light hover:bg-accent-purple/25 disabled:opacity-50 w-full"
+        className="text-xs px-3 py-1.5 rounded bg-accent/15 text-accent-light hover:bg-accent/25 disabled:opacity-50 w-full"
       >
         {backtesting
           ? `Running backtests... (${backtestProgress}/${symbols.length})`

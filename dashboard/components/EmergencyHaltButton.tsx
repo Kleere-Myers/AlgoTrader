@@ -67,7 +67,7 @@ export default function EmergencyHaltButton({ isHalted, onToggle }: EmergencyHal
             </button>
             <button
               onClick={() => setConfirming(false)}
-              className="px-3 py-1.5 rounded border border-navy-600 text-sm text-text-secondary hover:bg-navy-700"
+              className="px-3 py-1.5 rounded border border-surface-600 text-sm text-text-secondary hover:bg-surface-700"
             >
               Cancel
             </button>
@@ -91,7 +91,7 @@ export default function EmergencyHaltButton({ isHalted, onToggle }: EmergencyHal
               : isHalted ? "Resume Trading" : "Halt Trading"}
           </button>
           {!isHalted && !isMarketHours && (
-            <div className="absolute bottom-full left-0 mb-1 hidden group-hover:block bg-navy-800 text-text-primary text-xs rounded px-2 py-1 whitespace-nowrap">
+            <div className="absolute bottom-full left-0 mb-1 hidden group-hover:block bg-surface-800 text-text-primary text-xs rounded px-2 py-1 whitespace-nowrap">
               Market is closed (hours: 9:30 AM — 4:00 PM ET, Mon-Fri)
             </div>
           )}

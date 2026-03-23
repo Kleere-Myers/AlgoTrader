@@ -33,7 +33,7 @@ export default function StrategiesPage() {
   if (loading) {
     return (
       <div>
-        <h2 className="text-2xl font-bold text-text-primary mb-4">Strategies</h2>
+        <h2 className="text-lg font-semibold text-text-primary mb-4">Strategies</h2>
         <p className="text-text-secondary text-sm">Loading strategies...</p>
       </div>
     );
@@ -42,13 +42,13 @@ export default function StrategiesPage() {
   if (error) {
     return (
       <div>
-        <h2 className="text-2xl font-bold text-text-primary mb-4">Strategies</h2>
+        <h2 className="text-lg font-semibold text-text-primary mb-4">Strategies</h2>
         <div className="rounded-lg border border-loss/30 bg-loss/10 p-4 text-loss text-sm">
           {error}
         </div>
         <button
           onClick={fetchStrategies}
-          className="mt-3 text-sm px-3 py-1.5 rounded bg-accent-purple text-white hover:bg-accent-purple-dark"
+          className="mt-3 text-sm px-3 py-1.5 rounded bg-accent text-white hover:bg-accent-dark"
         >
           Retry
         </button>
@@ -60,21 +60,21 @@ export default function StrategiesPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold text-text-primary">Strategies</h2>
+          <h2 className="text-lg font-semibold text-text-primary">Strategies</h2>
           <p className="text-text-secondary text-sm mt-1">
             Enable/disable strategies, edit parameters, and trigger backtest runs.
           </p>
         </div>
         <button
           onClick={fetchStrategies}
-          className="text-xs px-3 py-1.5 rounded border border-navy-600 hover:bg-navy-700 text-text-secondary"
+          className="text-xs px-3 py-1.5 rounded border border-surface-600 hover:bg-surface-700 text-text-secondary"
         >
           Refresh
         </button>
       </div>
 
       {strategies.length === 0 ? (
-        <div className="rounded border border-dashed border-navy-600 p-12 text-center text-text-secondary">
+        <div className="rounded border border-dashed border-surface-600 p-12 text-center text-text-secondary">
           No strategies registered in the strategy engine
         </div>
       ) : (

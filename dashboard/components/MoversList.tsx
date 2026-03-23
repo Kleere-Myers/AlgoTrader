@@ -23,14 +23,14 @@ export default function MoversList({ gainers, losers }: MoversListProps) {
   const items = activeTab === "gainers" ? gainers.slice(0, 5) : losers.slice(0, 5);
 
   return (
-    <div className="bg-navy-800 rounded-lg border border-navy-600 overflow-hidden">
+    <div className="bg-surface-800 rounded-lg border border-surface-600 overflow-hidden">
       {/* Tabs */}
-      <div className="flex border-b border-navy-600">
+      <div className="flex border-b border-surface-600">
         <button
           onClick={() => setActiveTab("gainers")}
           className={`flex-1 px-4 py-2.5 text-xs font-semibold transition-colors ${
             activeTab === "gainers"
-              ? "text-white bg-accent-purple/20 border-b-2 border-accent-purple"
+              ? "text-white bg-accent/20 border-b-2 border-accent"
               : "text-text-secondary hover:text-text-primary"
           }`}
         >
@@ -40,7 +40,7 @@ export default function MoversList({ gainers, losers }: MoversListProps) {
           onClick={() => setActiveTab("losers")}
           className={`flex-1 px-4 py-2.5 text-xs font-semibold transition-colors ${
             activeTab === "losers"
-              ? "text-white bg-accent-purple/20 border-b-2 border-accent-purple"
+              ? "text-white bg-accent/20 border-b-2 border-accent"
               : "text-text-secondary hover:text-text-primary"
           }`}
         >
@@ -49,7 +49,7 @@ export default function MoversList({ gainers, losers }: MoversListProps) {
       </div>
 
       {/* List */}
-      <div className="divide-y divide-navy-600">
+      <div className="divide-y divide-surface-600">
         {items.map((mover) => {
           const isPositive = mover.change_pct >= 0;
           return (
@@ -57,7 +57,7 @@ export default function MoversList({ gainers, losers }: MoversListProps) {
               key={mover.symbol}
               className="flex items-center justify-between px-4 py-2.5"
             >
-              <Link href={`/quote/${mover.symbol}`} className="flex items-center gap-2 min-w-0 hover:text-accent-purple-light transition-colors">
+              <Link href={`/quote/${mover.symbol}`} className="flex items-center gap-2 min-w-0 hover:text-accent-light transition-colors">
                 <span className="text-sm font-bold text-text-primary">
                   {mover.symbol}
                 </span>
@@ -66,10 +66,10 @@ export default function MoversList({ gainers, losers }: MoversListProps) {
                 </span>
               </Link>
               <span
-                className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                className={`text-xs font-semibold font-mono tabular-nums px-2 py-0.5 rounded-full shrink-0 ${
                   isPositive
-                    ? "bg-gain/15 text-gain"
-                    : "bg-loss/15 text-loss"
+                    ? "bg-gain/10 text-gain"
+                    : "bg-loss/10 text-loss"
                 }`}
               >
                 {isPositive ? "+" : ""}

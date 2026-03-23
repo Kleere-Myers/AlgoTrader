@@ -34,9 +34,9 @@ export default function MarketIndexCard({ index }: MarketIndexCardProps) {
   };
 
   return (
-    <div className="bg-navy-900 rounded-lg px-3.5 py-3 border border-navy-600 min-w-[155px] flex-shrink-0 hover:bg-navy-700 transition-colors">
-      <p className="text-[11px] font-medium text-text-secondary leading-none">{index.name}</p>
-      <p className="text-[15px] font-semibold text-text-primary mt-1 leading-tight">
+    <div className="bg-surface-900 rounded-lg px-3.5 py-3 border border-surface-600 min-w-[155px] flex-shrink-0 hover:bg-surface-700 hover:border-surface-500 transition-all duration-150">
+      <p className="text-[11px] font-medium text-text-secondary leading-none truncate">{index.name}</p>
+      <p className="text-[15px] font-semibold text-text-primary mt-1 leading-tight font-mono tabular-nums">
         {formatPrice(index.current_price)}
       </p>
       <div className={`flex items-center gap-0.5 mt-0.5 ${changeColor}`}>
@@ -45,7 +45,7 @@ export default function MarketIndexCard({ index }: MarketIndexCardProps) {
         ) : (
           <TriangleDown className="w-3 h-3" />
         )}
-        <span className="text-xs font-medium">
+        <span className="text-xs font-medium font-mono tabular-nums">
           {sign}{index.change_abs.toFixed(2)} ({sign}{index.change_pct.toFixed(2)}%)
         </span>
       </div>

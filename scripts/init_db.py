@@ -18,10 +18,19 @@ from pathlib import Path
 import duckdb
 
 
-DEFAULT_DB_PATH = os.environ.get(
-    "DUCKDB_PATH",
-    str(Path(__file__).resolve().parent.parent / "data" / "algotrader.duckdb"),
-)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+_env_path = os.environ.get("DUCKDB_PATH", "")
+if _env_path:
+    # DUCKDB_PATH is written for service subdirs (e.g. "../data/..." from
+    # strategy-engine/ or execution-engine/).  Resolve relative paths from
+    # a service directory so the result is always the same absolute path.
+    p = Path(_env_path)
+    DEFAULT_DB_PATH = str(
+        p if p.is_absolute() else (PROJECT_ROOT / "strategy-engine" / p).resolve()
+    )
+else:
+    DEFAULT_DB_PATH = str(PROJECT_ROOT / "data" / "algotrader.duckdb")
 
 SCHEMA_SQL = """
 -- Historical and live price bars

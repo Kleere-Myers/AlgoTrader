@@ -20,7 +20,7 @@ interface EquityCurveChartProps {
 export default function EquityCurveChart({ data, label }: EquityCurveChartProps) {
   if (data.length === 0) {
     return (
-      <div className="rounded border border-dashed border-navy-600 p-12 text-center text-text-secondary">
+      <div className="rounded border border-dashed border-surface-600 p-12 text-center text-text-secondary">
         No equity data available
       </div>
     );
@@ -38,16 +38,16 @@ export default function EquityCurveChart({ data, label }: EquityCurveChartProps)
       <h4 className="text-sm font-medium text-text-secondary mb-2">{label}</h4>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#3a434c" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#2e2f38" />
           <XAxis
             dataKey="timestamp"
             tickFormatter={formatTime}
-            tick={{ fontSize: 10, fill: "#b0b9c1" }}
+            tick={{ fontSize: 10, fill: "#8b8d98" }}
             interval="preserveStartEnd"
           />
           <YAxis
             domain={["auto", "auto"]}
-            tick={{ fontSize: 10, fill: "#b0b9c1" }}
+            tick={{ fontSize: 10, fill: "#8b8d98" }}
             tickFormatter={(v: number) => `$${v.toLocaleString()}`}
           />
           <Tooltip
@@ -56,20 +56,20 @@ export default function EquityCurveChart({ data, label }: EquityCurveChartProps)
               return [`$${value.toLocaleString()} (${pctChange}%)`, "Equity"];
             }}
             labelFormatter={formatTime}
-            contentStyle={{ backgroundColor: "#232a31", border: "1px solid #3a434c", borderRadius: "6px", color: "#f0f3f5" }}
-            itemStyle={{ color: "#f0f3f5" }}
-            labelStyle={{ color: "#b0b9c1" }}
+            contentStyle={{ backgroundColor: "#1a1b22", border: "1px solid #2e2f38", borderRadius: "6px", color: "#e4e4e7" }}
+            itemStyle={{ color: "#e4e4e7" }}
+            labelStyle={{ color: "#8b8d98" }}
           />
           <ReferenceLine
             y={startEquity}
-            stroke="#b0b9c1"
+            stroke="#8b8d98"
             strokeDasharray="4 4"
-            label={{ value: `Start: $${startEquity.toLocaleString()}`, position: "right", fontSize: 10, fill: "#b0b9c1" }}
+            label={{ value: `Start: $${startEquity.toLocaleString()}`, position: "right", fontSize: 10, fill: "#8b8d98" }}
           />
           <Line
             type="monotone"
             dataKey="equity"
-            stroke="#9d61ff"
+            stroke="#06b6d4"
             dot={false}
             strokeWidth={2}
           />

@@ -11,7 +11,7 @@ interface SparklineChartProps {
 
 export default function SparklineChart({
   data,
-  color = "#21d87d",
+  color = "#34d399",
   width,
   height = 40,
 }: SparklineChartProps) {

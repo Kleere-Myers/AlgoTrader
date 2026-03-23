@@ -48,11 +48,11 @@ export default function PositionsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-text-primary">Positions</h2>
+        <h2 className="text-lg font-semibold text-text-primary">Positions</h2>
         {positions.length > 0 && (
           <div className="flex items-center gap-4">
             <span className="text-sm text-text-secondary">
-              Value: <span className="text-text-primary font-medium">${totalValue.toFixed(2)}</span>
+              Value: <span className="text-text-primary font-medium font-mono tabular-nums">${totalValue.toFixed(2)}</span>
             </span>
             <span
               className={`text-lg font-semibold ${
@@ -74,16 +74,16 @@ export default function PositionsPage() {
       {/* Summary badges */}
       {positions.length > 0 && (
         <div className="flex gap-3 mb-4">
-          <span className="text-xs px-2.5 py-1 rounded-full bg-accent-purple/15 text-accent-purple-light font-medium">
+          <span className="text-xs px-2.5 py-1 rounded-full bg-accent/15 text-accent-light font-medium">
             {positions.length} position{positions.length !== 1 ? "s" : ""}
           </span>
           {dayPositions.length > 0 && (
-            <span className="text-xs px-2.5 py-1 rounded-full bg-navy-700 text-text-secondary font-medium">
+            <span className="text-xs px-2.5 py-1 rounded-full bg-surface-700 text-text-secondary font-medium">
               {dayPositions.length} day
             </span>
           )}
           {swingPositions.length > 0 && (
-            <span className="text-xs px-2.5 py-1 rounded-full bg-navy-700 text-text-secondary font-medium">
+            <span className="text-xs px-2.5 py-1 rounded-full bg-surface-700 text-text-secondary font-medium">
               {swingPositions.length} swing
             </span>
           )}
@@ -95,8 +95,8 @@ export default function PositionsPage() {
       </p>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left border border-navy-600 bg-navy-900 rounded-lg">
-          <thead className="bg-navy-800 text-text-secondary uppercase text-xs">
+        <table className="w-full text-sm text-left border border-surface-600 bg-surface-900 rounded-lg">
+          <thead className="bg-surface-800 text-text-secondary uppercase text-xs">
             <tr>
               <th className="px-4 py-3">Symbol</th>
               <th className="px-4 py-3">Type</th>
@@ -110,7 +110,7 @@ export default function PositionsPage() {
               <th className="px-4 py-3">Take Profit <Tip text="Auto-sell trigger if price rises to this level." inline /></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-navy-600">
+          <tbody className="divide-y divide-surface-600">
             {positions.length === 0 ? (
               <tr>
                 <td
@@ -142,11 +142,11 @@ export default function PositionsPage() {
                     : null;
 
                 return (
-                  <tr key={p.symbol} className="hover:bg-navy-700 transition-colors">
+                  <tr key={p.symbol} className="hover:bg-surface-700 transition-colors">
                     <td className="px-4 py-3">
                       <Link
                         href={`/quote/${p.symbol}`}
-                        className="font-semibold text-text-primary hover:text-accent-purple-light transition-colors"
+                        className="font-semibold text-text-primary hover:text-accent-light transition-colors"
                       >
                         {p.symbol}
                       </Link>
@@ -155,30 +155,30 @@ export default function PositionsPage() {
                       <span
                         className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${
                           tradeType === "swing"
-                            ? "bg-accent-purple/15 text-accent-purple-light"
-                            : "bg-navy-700 text-text-secondary"
+                            ? "bg-accent/15 text-accent-light"
+                            : "bg-surface-700 text-text-secondary"
                         }`}
                       >
                         {tradeType}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-text-primary tabular-nums">{p.qty}</td>
-                    <td className="px-4 py-3 text-text-secondary tabular-nums">
+                    <td className="px-4 py-3 text-text-primary font-mono tabular-nums">{p.qty}</td>
+                    <td className="px-4 py-3 text-text-secondary font-mono tabular-nums">
                       ${p.avg_entry_price.toFixed(2)}
                     </td>
-                    <td className="px-4 py-3 text-text-primary tabular-nums">
+                    <td className="px-4 py-3 text-text-primary font-mono tabular-nums">
                       ${p.current_price.toFixed(2)}
                     </td>
-                    <td className="px-4 py-3 text-text-primary tabular-nums">
+                    <td className="px-4 py-3 text-text-primary font-mono tabular-nums">
                       ${marketValue.toFixed(2)}
                     </td>
-                    <td className={`px-4 py-3 font-medium tabular-nums ${pnlColor}`}>
+                    <td className={`px-4 py-3 font-medium font-mono tabular-nums ${pnlColor}`}>
                       {isPositive ? "+" : ""}${p.unrealized_pnl.toFixed(2)}
                     </td>
-                    <td className={`px-4 py-3 font-medium tabular-nums ${pnlColor}`}>
+                    <td className={`px-4 py-3 font-medium font-mono tabular-nums ${pnlColor}`}>
                       {isPositive ? "+" : ""}{pnlPct.toFixed(2)}%
                     </td>
-                    <td className="px-4 py-3 tabular-nums">
+                    <td className="px-4 py-3 font-mono tabular-nums">
                       {p.stop_loss_price != null ? (
                         <div>
                           <span className="text-text-primary">${p.stop_loss_price.toFixed(2)}</span>
@@ -192,7 +192,7 @@ export default function PositionsPage() {
                         <span className="text-text-secondary">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 tabular-nums">
+                    <td className="px-4 py-3 font-mono tabular-nums">
                       {p.take_profit_price != null ? (
                         <div>
                           <span className="text-text-primary">${p.take_profit_price.toFixed(2)}</span>

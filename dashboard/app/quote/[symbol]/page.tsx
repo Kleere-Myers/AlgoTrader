@@ -90,7 +90,7 @@ function ChartTooltip({
 }) {
   if (!active || !payload?.length || !label) return null;
   return (
-    <div className="bg-navy-900 border border-navy-600 rounded px-3 py-2 text-xs shadow-lg">
+    <div className="bg-surface-900 border border-surface-600 rounded px-3 py-2 text-xs shadow-lg">
       <p className="text-text-secondary">
         {(() => {
           const d = new Date(label);
@@ -106,9 +106,9 @@ function ChartTooltip({
 
 function StatRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between py-1.5 border-b border-navy-600 last:border-b-0">
+    <div className="flex justify-between py-1.5 border-b border-surface-600 last:border-b-0">
       <span className="text-xs text-text-secondary">{label}</span>
-      <span className="text-xs font-medium text-text-primary">{value}</span>
+      <span className="text-xs font-medium text-text-primary font-mono tabular-nums">{value}</span>
     </div>
   );
 }
@@ -164,14 +164,14 @@ export default function QuotePage() {
   const lineData = bars.map((b) => ({ timestamp: b.timestamp, close: b.close }));
   const chartIsPositive =
     bars.length >= 2 ? bars[bars.length - 1].close >= bars[0].close : true;
-  const strokeColor = chartIsPositive ? "#21d87d" : "#fc7a6e";
+  const strokeColor = chartIsPositive ? "#34d399" : "#f87171";
 
   if (loading && !company) {
     return (
       <div className="animate-pulse space-y-6">
-        <div className="h-10 bg-navy-800 rounded w-48" />
-        <div className="h-6 bg-navy-800 rounded w-32" />
-        <div className="h-[400px] bg-navy-800 rounded" />
+        <div className="h-10 bg-surface-800 rounded w-48" />
+        <div className="h-6 bg-surface-800 rounded w-32" />
+        <div className="h-[400px] bg-surface-800 rounded" />
       </div>
     );
   }
@@ -182,7 +182,7 @@ export default function QuotePage() {
       <div className="mb-4">
         <Link
           href="/"
-          className="text-xs text-text-secondary hover:text-accent-purple-light transition-colors"
+          className="text-xs text-text-secondary hover:text-accent-light transition-colors"
         >
           Overview
         </Link>
@@ -204,7 +204,7 @@ export default function QuotePage() {
           )}
         </div>
         <div className="flex items-baseline gap-3">
-          <span className="text-3xl font-bold text-text-primary">
+          <span className="text-3xl font-bold text-text-primary font-mono tabular-nums">
             {company?.current_price != null
               ? `$${company.current_price.toFixed(2)}`
               : "—"}
@@ -241,8 +241,8 @@ export default function QuotePage() {
                 onClick={() => setRange(r.value)}
                 className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
                   range === r.value
-                    ? "bg-accent-purple text-white"
-                    : "text-text-secondary hover:text-text-primary bg-navy-800"
+                    ? "bg-accent text-white"
+                    : "text-text-secondary hover:text-text-primary bg-surface-800"
                 }`}
               >
                 {r.label}
@@ -254,8 +254,8 @@ export default function QuotePage() {
               onClick={() => setChartType("line")}
               className={`px-2.5 py-1.5 text-xs font-medium rounded transition-colors ${
                 chartType === "line"
-                  ? "bg-accent-purple text-white"
-                  : "text-text-secondary hover:text-text-primary bg-navy-800"
+                  ? "bg-accent text-white"
+                  : "text-text-secondary hover:text-text-primary bg-surface-800"
               }`}
             >
               Line
@@ -264,8 +264,8 @@ export default function QuotePage() {
               onClick={() => setChartType("candle")}
               className={`px-2.5 py-1.5 text-xs font-medium rounded transition-colors ${
                 chartType === "candle"
-                  ? "bg-accent-purple text-white"
-                  : "text-text-secondary hover:text-text-primary bg-navy-800"
+                  ? "bg-accent text-white"
+                  : "text-text-secondary hover:text-text-primary bg-surface-800"
               }`}
             >
               Candle
@@ -274,7 +274,7 @@ export default function QuotePage() {
         </div>
 
         {barsLoading ? (
-          <div className="h-[400px] bg-navy-800 rounded-lg animate-pulse" />
+          <div className="h-[400px] bg-surface-800 rounded-lg animate-pulse" />
         ) : chartType === "candle" ? (
           <CandlestickChart bars={bars} signals={[]} symbol={symbol} />
         ) : (
@@ -286,12 +286,12 @@ export default function QuotePage() {
                   <stop offset="100%" stopColor={strokeColor} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#3a434c" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#2e2f38" vertical={false} />
               <XAxis
                 dataKey="timestamp"
                 tickFormatter={(t) => formatChartDate(t, range)}
-                stroke="#3a434c"
-                tick={{ fill: "#b0b9c1", fontSize: 11 }}
+                stroke="#2e2f38"
+                tick={{ fill: "#8b8d98", fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
                 interval="preserveStartEnd"
@@ -299,15 +299,15 @@ export default function QuotePage() {
               <YAxis
                 domain={["auto", "auto"]}
                 tickFormatter={(v: number) => `$${v.toFixed(2)}`}
-                stroke="#3a434c"
-                tick={{ fill: "#b0b9c1", fontSize: 11 }}
+                stroke="#2e2f38"
+                tick={{ fill: "#8b8d98", fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
                 width={75}
               />
               <Tooltip
                 content={<ChartTooltip />}
-                cursor={{ stroke: "#3a434c", strokeDasharray: "3 3" }}
+                cursor={{ stroke: "#2e2f38", strokeDasharray: "3 3" }}
               />
               <Area
                 type="monotone"
@@ -326,8 +326,8 @@ export default function QuotePage() {
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         {/* Key Statistics */}
         <div className="lg:col-span-1">
-          <h2 className="text-sm font-semibold text-text-secondary mb-2">Key Statistics</h2>
-          <div className="bg-navy-900 rounded-lg border border-navy-600 p-4">
+          <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-2 uppercase tracking-widest">Key Statistics</h2>
+          <div className="bg-surface-900 rounded-lg border border-surface-600 p-4">
             <StatRow label="Previous Close" value={fmt(company?.previous_close)} />
             <StatRow label="Open" value={fmt(company?.open)} />
             <StatRow
@@ -385,16 +385,16 @@ export default function QuotePage() {
           {/* Company Profile */}
           {company && (
             <div>
-              <h2 className="text-sm font-semibold text-text-secondary mb-2">Profile</h2>
-              <div className="bg-navy-900 rounded-lg border border-navy-600 p-4">
+              <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-2 uppercase tracking-widest">Profile</h2>
+              <div className="bg-surface-900 rounded-lg border border-surface-600 p-4">
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   {company.sector && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-purple/15 text-accent-purple-light">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent-light">
                       {company.sector}
                     </span>
                   )}
                   {company.industry && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-purple/10 text-accent-purple-light">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent-light">
                       {company.industry}
                     </span>
                   )}
@@ -405,7 +405,7 @@ export default function QuotePage() {
                     {company.summary.length > 300 && (
                       <button
                         onClick={() => setExpanded(!expanded)}
-                        className="text-accent-purple hover:text-accent-purple-light ml-1"
+                        className="text-accent hover:text-accent-light ml-1"
                       >
                         {expanded ? "less" : "...more"}
                       </button>
@@ -418,7 +418,7 @@ export default function QuotePage() {
 
           {/* News */}
           <div>
-            <h2 className="text-sm font-semibold text-text-secondary mb-2">News</h2>
+            <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-2 uppercase tracking-widest">News</h2>
             <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
               {news.length === 0 ? (
                 <p className="text-text-secondary text-sm">No news available</p>

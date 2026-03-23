@@ -8,32 +8,27 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        navy: {
-          950: "#101518",  // body bg (--yb-midnight)
-          900: "#1d2228",  // card bg (--yb-inkwell)
-          800: "#232a31",  // elevated bg (--yb-batcave)
-          700: "#2c363f",  // hover (--yb-ramones)
-          600: "#3a434c",  // borders
-          500: "#4e5964",  // muted
+        surface: {
+          950: "#0c0d10",  // body bg
+          900: "#14151a",  // card bg
+          800: "#1a1b22",  // elevated bg / inputs
+          700: "#22232b",  // hover
+          600: "#2e2f38",  // borders
+          500: "#3e3f4a",  // muted / scrollbar
         },
         accent: {
-          purple: "#9d61ff",       // --yb-grape-jelly dark
-          "purple-light": "#b88aff",
-          "purple-dark": "#7c3fe6",
-          blue: "#12a9ff",         // --yb-sky
+          DEFAULT: "#06b6d4",  // cyan-500
+          light: "#22d3ee",    // cyan-400
+          dark: "#0891b2",     // cyan-600
         },
-        gain: "#21d87d",           // --yb-sa-stock-up
-        loss: "#fc7a6e",           // --yb-sa-stock-down
-        "text-primary": "#f0f3f5", // --yb-gray-hair
-        "text-secondary": "#b0b9c1", // --yb-bob
+        gain: "#34d399",       // emerald-400
+        loss: "#f87171",       // red-400
+        "text-primary": "#e4e4e7",   // zinc-200
+        "text-secondary": "#8b8d98", // muted slate
       },
       fontFamily: {
-        sans: [
-          '"Helvetica Neue"',
-          'Helvetica',
-          'Arial',
-          'sans-serif',
-        ],
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
       },
     },
   },

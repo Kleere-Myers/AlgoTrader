@@ -19,21 +19,20 @@ export default function Navbar() {
   const pathname = usePathname();
 
   return (
-    <nav className="w-full bg-navy-900 border-b border-navy-600">
-      <div className="max-w-[1600px] mx-auto px-4 flex items-center justify-between h-14">
-        {/* Left: Logo */}
-        <Link href="/" className="flex items-center gap-1 shrink-0">
-          <span className="text-white font-bold text-lg tracking-tight">
-            Algo
+    <nav className="sticky top-0 z-50 w-full border-b border-white/[0.06] bg-surface-950/80 backdrop-blur-xl">
+      <div className="max-w-[1440px] mx-auto px-6 flex items-center justify-between h-14">
+        {/* Logo */}
+        <Link href="/" className="flex items-center gap-2 shrink-0 group">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent to-accent-dark flex items-center justify-center shadow-lg shadow-accent/20 group-hover:shadow-accent/30 transition-shadow">
+            <span className="text-surface-950 font-bold text-[11px] tracking-tight">AT</span>
+          </div>
+          <span className="text-text-primary font-semibold text-sm tracking-tight">
+            AlgoTrader
           </span>
-          <span className="text-white font-bold text-lg tracking-tight">
-            Trader
-          </span>
-          <span className="w-1.5 h-1.5 rounded-full bg-accent-purple inline-block mb-2" />
         </Link>
 
-        {/* Center: Nav links */}
-        <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
+        {/* Nav links */}
+        <div className="flex items-center gap-0.5 overflow-x-auto hide-scrollbar">
           {NAV_LINKS.map((link) => {
             const isActive =
               link.href === "/"
@@ -44,10 +43,10 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-3 py-4 text-sm whitespace-nowrap transition-colors border-b-2 ${
+                className={`px-3 py-1.5 text-[13px] font-medium rounded-md whitespace-nowrap transition-all duration-150 ${
                   isActive
-                    ? "text-white border-accent-purple"
-                    : "text-text-secondary border-transparent hover:text-text-primary"
+                    ? "text-text-primary bg-white/[0.08]"
+                    : "text-text-secondary hover:text-text-primary hover:bg-white/[0.04]"
                 }`}
               >
                 {link.label}
@@ -56,9 +55,9 @@ export default function Navbar() {
           })}
         </div>
 
-        {/* Right: Paper mode badge */}
-        <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 tracking-wide">
-          PAPER MODE
+        {/* Paper mode */}
+        <span className="shrink-0 text-[11px] font-mono font-medium px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 tracking-wider uppercase">
+          Paper
         </span>
       </div>
     </nav>

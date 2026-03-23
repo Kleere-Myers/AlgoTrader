@@ -25,11 +25,11 @@ function statusBadge(status: string) {
     pending: "bg-yellow-500/15 text-yellow-500",
     new: "bg-yellow-500/15 text-yellow-500",
     partially_filled: "bg-yellow-500/15 text-yellow-500",
-    cancelled: "bg-navy-600 text-text-secondary",
-    canceled: "bg-navy-600 text-text-secondary",
+    cancelled: "bg-surface-600 text-text-secondary",
+    canceled: "bg-surface-600 text-text-secondary",
     rejected: "bg-loss/15 text-loss",
   };
-  const style = styles[s] || "bg-navy-600 text-text-secondary";
+  const style = styles[s] || "bg-surface-600 text-text-secondary";
   return (
     <span className={`text-xs px-2 py-0.5 rounded font-medium ${style}`}>
       {status}
@@ -62,14 +62,14 @@ export default function OrdersPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold text-text-primary">Orders</h2>
-          <p className="text-text-secondary text-sm mt-1">
+          <h2 className="text-lg font-semibold text-text-primary">Orders</h2>
+          <p className="text-text-secondary text-sm mt-0.5">
             Recent order history with fill prices, status, and strategy attribution.
           </p>
         </div>
         <button
           onClick={fetchOrders}
-          className="text-xs px-3 py-1.5 rounded border border-navy-600 hover:bg-navy-700 text-text-secondary"
+          className="text-xs px-3 py-1.5 rounded border border-surface-600 hover:bg-surface-700 text-text-secondary"
         >
           Refresh
         </button>
@@ -82,8 +82,8 @@ export default function OrdersPage() {
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left border border-navy-600 bg-navy-900 rounded-lg">
-          <thead className="bg-navy-800 text-text-secondary uppercase text-xs">
+        <table className="w-full text-sm text-left border border-surface-600 bg-surface-900 rounded-lg">
+          <thead className="bg-surface-800 text-text-secondary uppercase text-xs">
             <tr>
               <th className="px-4 py-3">Symbol</th>
               <th className="px-4 py-3">Side <Tip text="BUY means shares were purchased. SELL means shares were sold." inline /></th>
@@ -95,7 +95,7 @@ export default function OrdersPage() {
               <th className="px-4 py-3">Filled</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-navy-600">
+          <tbody className="divide-y divide-surface-600">
             {loading ? (
               <tr>
                 <td className="px-4 py-8 text-center text-text-secondary" colSpan={8}>
@@ -110,7 +110,7 @@ export default function OrdersPage() {
               </tr>
             ) : (
               orders.map((o) => (
-                <tr key={o.order_id} className="hover:bg-navy-800">
+                <tr key={o.order_id} className="hover:bg-surface-800">
                   <td className="px-4 py-2.5 font-medium text-text-primary">{o.symbol}</td>
                   <td className="px-4 py-2.5">
                     <span
@@ -127,7 +127,7 @@ export default function OrdersPage() {
                   </td>
                   <td className="px-4 py-2.5">{statusBadge(o.status)}</td>
                   <td className="px-4 py-2.5 text-text-secondary">{o.strategy_name}</td>
-                  <td className="px-4 py-2.5 text-text-secondary text-xs">{formatTime(o.submitted_at)}</td>
+                  <td className="px-4 py-2.5 text-text-secondary text-xs">{formatTime(o.created_at || o.submitted_at || null)}</td>
                   <td className="px-4 py-2.5 text-text-secondary text-xs">{formatTime(o.filled_at)}</td>
                 </tr>
               ))

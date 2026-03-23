@@ -136,7 +136,7 @@ Position quantities sync with Alpaca every ~5 minutes + on startup
 6. All Rust order submission must pass risk validation BEFORE calling Alpaca API.
 7. `.env` and `data/` are always in `.gitignore`.
 8. DuckDB version must stay aligned between Python and Rust. Never upgrade one without the other.
-9. Dashboard must follow the Yahoo Finance dark theme. Run `/styling` before any UI changes.
+9. Dashboard uses the "Slate" design system — dark slate surfaces, cyan accent (#06b6d4), DM Sans + JetBrains Mono fonts. Run `/styling` before any UI changes.
 
 ---
 
@@ -205,8 +205,9 @@ keys are available for news and market data endpoints.
 
 ## Dashboard (Next.js 14 — Yahoo Finance dark theme)
 
-**Design system:** Yahoo Finance dark mode (`/styling` skill for full reference).
-Top navbar layout, full-width, Helvetica Neue font, `#101518` body background.
+**Design system:** "Slate" — dark slate surfaces with cyan accent (`/styling` skill for full reference).
+Sticky top navbar with backdrop blur, max-w-[1440px] container, DM Sans + JetBrains Mono fonts,
+`#0c0d10` body background, `#06b6d4` cyan accent, `#34d399`/`#f87171` gain/loss.
 
 ### Routes (10 static + 1 dynamic)
 `/` Overview, `/watchlist` Watchlist, `/positions`, `/orders`, `/strategies`,

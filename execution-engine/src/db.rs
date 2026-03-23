@@ -14,6 +14,86 @@ pub fn connect_readonly() -> Result<Connection, duckdb::Error> {
     Connection::open_with_flags(&path, duckdb::Config::default().access_mode(duckdb::AccessMode::ReadOnly)?)
 }
 
+/// Ensure all required tables exist. Called on startup so the engine
+/// self-heals if the DB file is new or was recreated after corruption.
+pub fn ensure_schema(con: &Connection) -> Result<(), duckdb::Error> {
+    // Sequences (IF NOT EXISTS is idempotent)
+    con.execute_batch(
+        "CREATE SEQUENCE IF NOT EXISTS signals_id_seq START 1;
+         CREATE SEQUENCE IF NOT EXISTS orders_id_seq START 1;
+         CREATE SEQUENCE IF NOT EXISTS strategy_config_id_seq START 1;",
+    )?;
+
+    con.execute_batch(
+        "CREATE TABLE IF NOT EXISTS ohlcv_bars (
+            symbol    VARCHAR NOT NULL,
+            timestamp TIMESTAMP NOT NULL,
+            open      DOUBLE NOT NULL,
+            high      DOUBLE NOT NULL,
+            low       DOUBLE NOT NULL,
+            close     DOUBLE NOT NULL,
+            volume    BIGINT NOT NULL,
+            bar_size  VARCHAR NOT NULL DEFAULT '5min',
+            PRIMARY KEY (symbol, timestamp, bar_size)
+        );
+        CREATE TABLE IF NOT EXISTS signals (
+            id            INTEGER PRIMARY KEY DEFAULT nextval('signals_id_seq'),
+            strategy_name VARCHAR NOT NULL,
+            symbol        VARCHAR NOT NULL,
+            timestamp     TIMESTAMP NOT NULL,
+            direction     VARCHAR NOT NULL CHECK (direction IN ('BUY','SELL','HOLD')),
+            confidence    DOUBLE NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0),
+            reason        VARCHAR,
+            metadata      JSON,
+            trade_type    VARCHAR NOT NULL DEFAULT 'day' CHECK (trade_type IN ('day','swing'))
+        );
+        CREATE TABLE IF NOT EXISTS orders (
+            id            INTEGER PRIMARY KEY DEFAULT nextval('orders_id_seq'),
+            order_id      VARCHAR NOT NULL UNIQUE,
+            alpaca_id     VARCHAR,
+            symbol        VARCHAR NOT NULL,
+            side          VARCHAR NOT NULL CHECK (side IN ('buy','sell')),
+            qty           DOUBLE NOT NULL,
+            order_type    VARCHAR NOT NULL DEFAULT 'market',
+            limit_price   DOUBLE,
+            filled_price  DOUBLE,
+            status        VARCHAR NOT NULL DEFAULT 'pending',
+            strategy_name VARCHAR,
+            created_at    TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            filled_at     TIMESTAMP,
+            trade_type    VARCHAR NOT NULL DEFAULT 'day' CHECK (trade_type IN ('day','swing'))
+        );
+        CREATE TABLE IF NOT EXISTS positions (
+            symbol          VARCHAR PRIMARY KEY,
+            qty             DOUBLE NOT NULL,
+            avg_entry_price DOUBLE NOT NULL,
+            current_price   DOUBLE,
+            unrealized_pnl  DOUBLE,
+            updated_at      TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            trade_type      VARCHAR NOT NULL DEFAULT 'day' CHECK (trade_type IN ('day','swing')),
+            stop_loss_price DOUBLE,
+            take_profit_price DOUBLE
+        );
+        CREATE TABLE IF NOT EXISTS daily_pnl (
+            date           DATE PRIMARY KEY,
+            realized_pnl   DOUBLE NOT NULL DEFAULT 0.0,
+            unrealized_pnl DOUBLE NOT NULL DEFAULT 0.0,
+            total_trades   INTEGER NOT NULL DEFAULT 0,
+            win_rate       DOUBLE,
+            account_equity DOUBLE
+        );
+        CREATE TABLE IF NOT EXISTS strategy_config (
+            id            INTEGER PRIMARY KEY DEFAULT nextval('strategy_config_id_seq'),
+            strategy_name VARCHAR NOT NULL UNIQUE,
+            params        JSON,
+            enabled       BOOLEAN NOT NULL DEFAULT true,
+            created_at    TIMESTAMP NOT NULL DEFAULT current_timestamp,
+            updated_at    TIMESTAMP NOT NULL DEFAULT current_timestamp
+        );",
+    )?;
+    Ok(())
+}
+
 /// Upsert an OHLCV bar into the ohlcv_bars table.
 pub fn upsert_bar(con: &Connection, bar: &Bar, bar_size: &str) -> Result<(), duckdb::Error> {
     con.execute(

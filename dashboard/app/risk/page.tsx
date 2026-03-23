@@ -139,7 +139,7 @@ export default function RiskPage() {
   if (loading) {
     return (
       <div>
-        <h2 className="text-2xl font-bold text-text-primary mb-4">Risk Settings</h2>
+        <h2 className="text-lg font-semibold text-text-primary mb-4">Risk Settings</h2>
         <p className="text-text-secondary text-sm">Loading risk configuration...</p>
       </div>
     );
@@ -148,23 +148,23 @@ export default function RiskPage() {
   if (fetchError) {
     return (
       <div>
-        <h2 className="text-2xl font-bold text-text-primary mb-4">Risk Settings</h2>
+        <h2 className="text-lg font-semibold text-text-primary mb-4">Risk Settings</h2>
         <div className="rounded-lg border border-loss/30 bg-loss/10 p-4 text-loss text-sm">{fetchError}</div>
-        <button onClick={fetchData} className="mt-3 text-sm px-3 py-1.5 rounded bg-accent-purple text-white hover:bg-accent-purple-dark">Retry</button>
+        <button onClick={fetchData} className="mt-3 text-sm px-3 py-1.5 rounded bg-accent text-white hover:bg-accent-dark">Retry</button>
       </div>
     );
   }
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-text-primary mb-1">Risk Settings</h2>
+      <h2 className="text-lg font-semibold text-text-primary mb-1">Risk Settings</h2>
       <p className="text-text-secondary text-sm mb-6">
         View and edit risk rule thresholds. Changes take effect immediately.
       </p>
 
       {/* Config fields */}
-      <div className="rounded-lg border border-navy-600 bg-navy-900 mb-6">
-        <div className="divide-y divide-navy-600">
+      <div className="rounded-lg border border-surface-600 bg-surface-900 mb-6">
+        <div className="divide-y divide-surface-600">
           {config && FIELDS.map((field) => {
             const currentValue = config[field.key];
             const inputValue = edited[field.key] ?? toInputValue(currentValue, field.format);
@@ -176,7 +176,7 @@ export default function RiskPage() {
                   <div className="flex items-center gap-2">
                     <label className="text-sm font-medium text-text-primary">{field.label}</label>
                     {field.readOnly && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-navy-600 text-text-secondary">read-only</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-surface-600 text-text-secondary">read-only</span>
                     )}
                   </div>
                   <p className="text-xs text-text-secondary mt-0.5">{field.description}</p>
@@ -185,10 +185,10 @@ export default function RiskPage() {
                 <div className="flex items-center gap-2 shrink-0">
                   {field.readOnly ? (
                     <div className="relative group">
-                      <span className="text-sm font-mono bg-navy-800 border border-navy-600 rounded px-3 py-1.5 text-text-secondary cursor-help">
+                      <span className="text-sm font-mono bg-surface-800 border border-surface-600 rounded px-3 py-1.5 text-text-secondary cursor-help">
                         {String(currentValue)}
                       </span>
-                      <div className="absolute bottom-full right-0 mb-1 hidden group-hover:block bg-navy-800 text-text-primary text-xs rounded px-2 py-1 whitespace-nowrap">
+                      <div className="absolute bottom-full right-0 mb-1 hidden group-hover:block bg-surface-800 text-text-primary text-xs rounded px-2 py-1 whitespace-nowrap">
                         EOD flatten time is not configurable in v1
                       </div>
                     </div>
@@ -198,8 +198,8 @@ export default function RiskPage() {
                         type="text"
                         value={inputValue}
                         onChange={(e) => handleInputChange(field.key, e.target.value)}
-                        className={`w-24 text-sm font-mono border rounded px-3 py-1.5 text-right bg-navy-800 text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-blue ${
-                          error ? "border-loss bg-loss/10" : "border-navy-600"
+                        className={`w-24 text-sm font-mono border rounded px-3 py-1.5 text-right bg-surface-800 text-text-primary focus:outline-none focus:ring-1 focus:ring-accent ${
+                          error ? "border-loss bg-loss/10" : "border-surface-600"
                         }`}
                       />
                       {field.format === "pct" && <span className="text-xs text-text-secondary">%</span>}
@@ -213,7 +213,7 @@ export default function RiskPage() {
         </div>
 
         {/* Save bar */}
-        <div className="px-5 py-3 bg-navy-800 border-t border-navy-600 flex items-center justify-between">
+        <div className="px-5 py-3 bg-surface-800 border-t border-surface-600 flex items-center justify-between">
           {saveError && (
             <p className="text-sm text-loss">{saveError}</p>
           )}
@@ -222,7 +222,7 @@ export default function RiskPage() {
             {hasChanges && (
               <button
                 onClick={() => { setEdited({}); setErrors({}); setSaveError(null); }}
-                className="text-xs px-3 py-1.5 rounded border border-navy-600 text-text-secondary hover:bg-navy-700"
+                className="text-xs px-3 py-1.5 rounded border border-surface-600 text-text-secondary hover:bg-surface-700"
               >
                 Discard
               </button>
@@ -230,7 +230,7 @@ export default function RiskPage() {
             <button
               onClick={handleSave}
               disabled={!hasChanges || saving}
-              className="text-xs px-4 py-1.5 rounded bg-accent-purple text-white hover:bg-accent-purple-dark disabled:opacity-50 disabled:cursor-not-allowed"
+              className="text-xs px-4 py-1.5 rounded bg-accent text-white hover:bg-accent-dark disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? "Saving..." : "Save Changes"}
             </button>

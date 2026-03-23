@@ -33,7 +33,8 @@ export interface Order {
   filled_price: number | null;
   status: string;
   strategy_name: string;
-  submitted_at: string;
+  submitted_at?: string;
+  created_at?: string;
   filled_at: string | null;
   trade_type?: TradeType;
 }

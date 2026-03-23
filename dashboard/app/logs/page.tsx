@@ -9,9 +9,9 @@ const EVENT_COLORS: Record<SseEventType, string> = {
   RISK_BREACH: "bg-loss/15 text-loss",
   TRADING_HALTED: "bg-loss/15 text-loss",
   TRADING_RESUMED: "bg-gain/15 text-gain",
-  POSITION_UPDATE: "bg-accent-purple/15 text-accent-purple-light",
+  POSITION_UPDATE: "bg-accent/15 text-accent-light",
   RISK_CONFIG_UPDATED: "bg-yellow-500/15 text-yellow-500",
-  DAILY_PNL: "bg-navy-600 text-text-secondary",
+  DAILY_PNL: "bg-surface-600 text-text-secondary",
 };
 
 function formatTimestamp(iso: string): string {
@@ -65,7 +65,7 @@ export default function LogsPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold text-text-primary">Logs</h2>
+          <h2 className="text-lg font-semibold text-text-primary">Logs</h2>
           <p className="text-text-secondary text-sm mt-1">
             Real-time signal and order event stream from the execution engine.
           </p>
@@ -75,24 +75,24 @@ export default function LogsPage() {
             onClick={() => setAutoScroll(!autoScroll)}
             className={`text-xs px-3 py-1.5 rounded border ${
               autoScroll
-                ? "border-accent-purple/40 bg-accent-purple/15 text-accent-purple-light"
-                : "border-navy-600 text-text-secondary hover:bg-navy-700"
+                ? "border-accent/40 bg-accent/15 text-accent-light"
+                : "border-surface-600 text-text-secondary hover:bg-surface-700"
             }`}
           >
             {autoScroll ? "Auto-scroll: ON" : "Auto-scroll: OFF"}
           </button>
           <button
             onClick={handleClear}
-            className="text-xs px-3 py-1.5 rounded border border-navy-600 hover:bg-navy-700 text-text-secondary"
+            className="text-xs px-3 py-1.5 rounded border border-surface-600 hover:bg-surface-700 text-text-secondary"
           >
             Clear
           </button>
         </div>
       </div>
 
-      <div className="rounded-lg border border-navy-600 bg-navy-900 overflow-hidden">
+      <div className="rounded-lg border border-surface-600 bg-surface-900 overflow-hidden">
         {/* Status bar */}
-        <div className="px-4 py-3 bg-navy-800 border-b border-navy-600 flex items-center justify-between">
+        <div className="px-4 py-3 bg-surface-800 border-b border-surface-600 flex items-center justify-between">
           <span className="text-xs text-text-secondary uppercase tracking-wide">
             SSE Event Stream
           </span>
@@ -121,11 +121,11 @@ export default function LogsPage() {
           ) : (
             <div className="space-y-0.5">
               {orderedEvents.map((event, i) => {
-                const colorClass = EVENT_COLORS[event.event_type] || "bg-navy-600 text-text-secondary";
+                const colorClass = EVENT_COLORS[event.event_type] || "bg-surface-600 text-text-secondary";
                 return (
                   <div
                     key={i}
-                    className="flex items-start gap-2 py-1 px-1 rounded hover:bg-navy-800"
+                    className="flex items-start gap-2 py-1 px-1 rounded hover:bg-surface-800"
                   >
                     <span className="text-text-secondary shrink-0 w-16">
                       {formatTimestamp(event.timestamp)}

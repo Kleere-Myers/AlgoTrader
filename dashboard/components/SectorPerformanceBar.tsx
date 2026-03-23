@@ -13,7 +13,7 @@ export default function SectorPerformanceBar({
   const maxAbs = Math.max(...sorted.map((s) => Math.abs(s.change_pct)), 0.01);
 
   return (
-    <div className="bg-navy-800 rounded-lg p-3 border border-navy-600">
+    <div className="bg-surface-800 rounded-lg p-3 border border-surface-600">
       <div className="space-y-1.5">
         {sorted.map((sector) => {
           const isPositive = sector.change_pct >= 0;
@@ -26,12 +26,12 @@ export default function SectorPerformanceBar({
               </span>
               <div className="flex-1 h-4 relative">
                 {/* Center line */}
-                <div className="absolute left-1/2 top-0 bottom-0 w-px bg-navy-600" />
+                <div className="absolute left-1/2 top-0 bottom-0 w-px bg-surface-600" />
                 {/* Bar */}
                 <div
                   className="absolute top-0.5 h-3 rounded-sm transition-all"
                   style={{
-                    backgroundColor: isPositive ? "#21d87d" : "#fc7a6e",
+                    backgroundColor: isPositive ? "#34d399" : "#f87171",
                     width: `${barWidthPct}%`,
                     ...(isPositive
                       ? { left: "50%" }

@@ -108,7 +108,22 @@ async fn main() {
 
     let equity: f64 = account.equity.parse().unwrap_or(0.0);
 
-    // 5. Load positions from DuckDB, then sync with Alpaca
+    // 5. Ensure DuckDB schema exists (self-heal after corruption / fresh DB)
+    match db::connect() {
+        Ok(con) => {
+            if let Err(e) = db::ensure_schema(&con) {
+                error!("Failed to ensure DuckDB schema: {e}");
+                std::process::exit(1);
+            }
+            info!("DuckDB schema verified");
+        }
+        Err(e) => {
+            error!("Failed to connect to DuckDB: {e}");
+            std::process::exit(1);
+        }
+    }
+
+    // 6. Load positions from DuckDB, then sync with Alpaca
     let mut position_tracker = PositionTracker::new();
     if let Ok(con) = db::connect() {
         match db::load_positions(&con) {

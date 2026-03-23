@@ -16,7 +16,7 @@ export default function GuidePage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-text-primary mb-1">Guide</h2>
+      <h2 className="text-lg font-semibold text-text-primary mb-1">Guide</h2>
       <p className="text-text-secondary text-sm mb-6">
         Everything you need to understand how AlgoTrader works, explained in plain English.
       </p>
@@ -29,8 +29,8 @@ export default function GuidePage() {
             onClick={() => setActive(s.id)}
             className={`text-sm px-3 py-1.5 rounded-full transition-colors ${
               active === s.id
-                ? "bg-accent-purple text-white"
-                : "bg-navy-600 text-text-secondary hover:bg-navy-700"
+                ? "bg-accent text-white"
+                : "bg-surface-600 text-text-secondary hover:bg-surface-700"
             }`}
           >
             {s.label}
@@ -38,7 +38,7 @@ export default function GuidePage() {
         ))}
       </div>
 
-      <div className="bg-navy-900 rounded-lg border border-navy-600 p-6 prose prose-sm prose-invert max-w-none">
+      <div className="bg-surface-900 rounded-lg border border-surface-600 p-6 prose prose-sm prose-invert max-w-none">
         {active === "what" && <WhatSection />}
         {active === "how" && <HowSection />}
         {active === "strategies" && <StrategiesSection />}
@@ -100,8 +100,8 @@ function HowSection() {
       </P>
 
       <div className="space-y-4 mb-4">
-        <div className="bg-accent-purple/10 border border-accent-purple/30 rounded-lg p-4">
-          <h4 className="font-semibold text-accent-purple-light mb-1">1. Market Data Arrives</h4>
+        <div className="bg-accent/10 border border-accent/30 rounded-lg p-4">
+          <h4 className="font-semibold text-accent-light mb-1">1. Market Data Arrives</h4>
           <p className="text-sm text-text-secondary">
             Every 5 minutes during market hours, your brokerage (Alpaca) sends the latest price data
             for all 6 stocks. This includes the open, high, low, close prices, and trading volume
@@ -118,8 +118,8 @@ function HowSection() {
           </p>
         </div>
 
-        <div className="bg-accent-purple/10 border border-accent-purple/30 rounded-lg p-4">
-          <h4 className="font-semibold text-accent-purple-light mb-1">3. Risk Checks and Execution</h4>
+        <div className="bg-accent/10 border border-accent/30 rounded-lg p-4">
+          <h4 className="font-semibold text-accent-light mb-1">3. Risk Checks and Execution</h4>
           <p className="text-sm text-text-secondary">
             Before any trade is placed, the signal passes through safety checks (risk rules).
             If the trade is too risky — for example, if you have already lost too much today, or
@@ -212,7 +212,7 @@ function StrategyExplainer({
   example: string;
 }) {
   return (
-    <div className="border border-navy-600 rounded-lg p-4">
+    <div className="border border-surface-600 rounded-lg p-4">
       <h4 className="font-semibold text-text-primary mb-2">
         {emoji} {name}
       </h4>
@@ -267,7 +267,7 @@ function PagesSection() {
 
 function PageExplainer({ name, description }: { name: string; description: string }) {
   return (
-    <div className="border-l-4 border-accent-purple pl-4 py-1">
+    <div className="border-l-4 border-accent pl-4 py-1">
       <h4 className="font-semibold text-text-primary text-sm">{name}</h4>
       <p className="text-sm text-text-secondary">{description}</p>
     </div>
@@ -340,7 +340,7 @@ function GlossarySection() {
       <SectionTitle>Glossary</SectionTitle>
       <P>Quick reference for terms you will see throughout the dashboard.</P>
 
-      <div className="space-y-0 divide-y divide-navy-600">
+      <div className="space-y-0 divide-y divide-surface-600">
         <Term term="Bar" definition="A snapshot of a stock's price over a time period (e.g., 5 minutes). Includes the opening price, highest price, lowest price, closing price, and volume (number of shares traded)." />
         <Term term="Backtest" definition="Running a strategy against historical data to see how it would have performed in the past. Not a guarantee of future results, but useful for comparing strategies." />
         <Term term="Bollinger Bands" definition="Lines drawn above and below a stock's average price. When the price touches the lower band, it may be oversold. When it touches the upper band, it may be overbought. The '%B' value tells you where the price is between the bands (0 = lower band, 1 = upper band)." />

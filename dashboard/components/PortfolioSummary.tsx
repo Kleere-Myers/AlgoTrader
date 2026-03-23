@@ -61,13 +61,13 @@ export default function PortfolioSummary({ summary }: PortfolioSummaryProps) {
   ];
 
   return (
-    <div className="bg-navy-800 rounded-lg p-4 border border-navy-600 space-y-4">
+    <div className="bg-surface-900 rounded-lg p-4 border border-surface-600 space-y-4">
       {metrics.map((m) => (
         <div key={m.label}>
-          <p className="text-text-secondary text-xs uppercase tracking-wider">
+          <p className="text-text-secondary text-[10px] font-mono uppercase tracking-widest">
             {m.label}
           </p>
-          <p className={`text-lg font-semibold ${m.color}`}>{m.value}</p>
+          <p className={`text-base font-semibold font-mono tabular-nums ${m.color}`}>{m.value}</p>
         </div>
       ))}
     </div>

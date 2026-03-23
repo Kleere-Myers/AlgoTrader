@@ -37,10 +37,10 @@ export default function NewsCard({ article }: NewsCardProps) {
       href={article.url || "#"}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex gap-3 bg-navy-800 hover:bg-navy-700 transition-colors rounded-lg p-3 border border-navy-600 cursor-pointer"
+      className="flex gap-3 bg-surface-800 hover:bg-surface-700 transition-colors rounded-lg p-3 border border-surface-600 cursor-pointer"
     >
       {/* Thumbnail */}
-      <div className="shrink-0 w-20 h-20 rounded overflow-hidden bg-navy-600">
+      <div className="shrink-0 w-20 h-20 rounded overflow-hidden bg-surface-600">
         {article.thumbnail_url ? (
           <img
             src={article.thumbnail_url}
@@ -70,7 +70,7 @@ export default function NewsCard({ article }: NewsCardProps) {
             </span>
           )}
           {article.symbol && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-accent-purple/20 text-accent-purple-light font-medium">
+            <span className="text-xs px-1.5 py-0.5 rounded bg-accent/20 text-accent-light font-medium">
               {article.symbol}
             </span>
           )}

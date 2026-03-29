@@ -13,7 +13,7 @@ asked, and you flag any change that touches a shared contract before making it.
 - **Language:** Python 3.12
 - **Framework:** FastAPI (async)
 - **Port:** 9100
-- **Database:** DuckDB via `duckdb` Python package
+- **Database:** SQLite (read-only; all writes proxied through execution engine)
 - **Scheduler:** APScheduler for market-hours jobs
 - **Broker SDK:** alpaca-py (for market data fetching only — never submit orders)
 
@@ -31,7 +31,7 @@ pandas-ta
 vectorbt
 scikit-learn
 lightgbm
-duckdb
+aiosqlite
 apscheduler
 python-dotenv
 pytest
@@ -192,25 +192,31 @@ features = [
 
 ## Database Access
 
+The strategy engine connects to SQLite in **read-only** mode. All writes are
+proxied through the execution engine via REST:
+- `POST /db/signals` — write signals
+- `POST /db/watched-symbols` — add watched symbols
+- `DELETE /db/watched-symbols` — remove watched symbols
+
 ```python
-import duckdb
+import sqlite3
 import os
 
 def get_db():
-    return duckdb.connect(os.getenv("DUCKDB_PATH", "../data/algotrader.duckdb"))
+    db_path = os.getenv("DB_PATH", "../data/algotrader.sqlite")
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    return conn
 ```
 
-Tables you read and write:
-- `ohlcv_bars` — read for backtesting and feature generation
-- `signals` — write every signal emitted (including HOLDs for audit trail)
-- `strategy_config` — read/write strategy params and enabled state
-- `backtest_results` — write backtest summaries
+Tables you read:
+- `ohlcv_bars` — for backtesting and feature generation
+- `signals` — audit trail
+- `strategy_config` — strategy params and enabled state
+- `positions` — to avoid signaling on already-held symbols
+- `watched_symbols` — tracked symbol list
 
-Tables you read only:
-- `positions` — read to avoid signaling on already-held symbols (optional logic)
-
-Tables you never touch:
-- `orders`, `daily_pnl` — owned by execution-engine
+Tables you never write directly:
+- All tables — writes go through execution engine REST API
 
 ---
 
@@ -245,4 +251,4 @@ Use `pandas_market_calendars` or a simple NYSE holiday list to skip non-trading 
 - Any change to the Signal dataclass fields or types
 - Any change to the POST /signal request or response schema
 - Any new dependency that requires a C extension (can complicate deployment)
-- Any change to DuckDB table schemas in `scripts/init_db.py`
+- Any change to SQLite table schemas in `scripts/init_db.py`

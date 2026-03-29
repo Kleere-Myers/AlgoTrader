@@ -1,10 +1,9 @@
-"""Train LightGBM model on historical data from DuckDB."""
+"""Train LightGBM model on historical data from SQLite."""
 
 import os
 import pickle
+import sqlite3
 from pathlib import Path
-
-import duckdb
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
@@ -20,27 +19,29 @@ MODEL_PATH = MODELS_DIR / "lgbm_signal_model.pkl"
 METADATA_PATH = MODELS_DIR / "lgbm_metadata.pkl"
 
 DB_PATH = os.environ.get(
-    "DUCKDB_PATH",
-    str(Path(__file__).resolve().parent.parent.parent / "data" / "algotrader.duckdb"),
+    "DB_PATH",
+    os.environ.get("DUCKDB_PATH",
+                    str(Path(__file__).resolve().parent.parent.parent / "data" / "algotrader.sqlite")),
 )
 
 
 def load_training_data() -> pd.DataFrame:
-    """Load OHLCV bars for all symbols from DuckDB and compute features + labels."""
-    con = duckdb.connect(DB_PATH, read_only=True)
+    """Load OHLCV bars for all symbols from SQLite and compute features + labels."""
+    con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     try:
         placeholders = ", ".join(["?"] * len(SYMBOLS))
-        all_bars = con.execute(
+        rows = con.execute(
             "SELECT symbol, timestamp, open, high, low, close, volume, bar_size "
             f"FROM ohlcv_bars WHERE symbol IN ({placeholders}) "
             "ORDER BY symbol, timestamp",
             SYMBOLS,
-        ).fetchdf()
+        ).fetchall()
     finally:
         con.close()
 
+    all_bars = pd.DataFrame(rows, columns=["symbol", "timestamp", "open", "high", "low", "close", "volume", "bar_size"])
     if all_bars.empty:
-        raise ValueError("No OHLCV data found in DuckDB for training")
+        raise ValueError("No OHLCV data found in database for training")
 
     frames = []
     for symbol in SYMBOLS:

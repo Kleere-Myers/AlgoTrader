@@ -99,6 +99,7 @@ export default function PositionsPage() {
           <thead className="bg-surface-800 text-text-secondary uppercase text-xs">
             <tr>
               <th className="px-4 py-3">Symbol</th>
+              <th className="px-4 py-3">Side</th>
               <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3">Qty <Tip text="Number of shares held." inline /></th>
               <th className="px-4 py-3">Avg Entry <Tip text="Average price paid per share." inline /></th>
@@ -115,7 +116,7 @@ export default function PositionsPage() {
               <tr>
                 <td
                   className="px-4 py-8 text-center text-text-secondary"
-                  colSpan={10}
+                  colSpan={11}
                 >
                   No open positions
                 </td>
@@ -123,9 +124,12 @@ export default function PositionsPage() {
             ) : (
               positions.map((p) => {
                 const marketValue = p.current_price * p.qty;
+                const isShort = p.side === "short";
                 const pnlPct =
                   p.avg_entry_price > 0
-                    ? ((p.current_price - p.avg_entry_price) / p.avg_entry_price) * 100
+                    ? isShort
+                      ? ((p.avg_entry_price - p.current_price) / p.avg_entry_price) * 100
+                      : ((p.current_price - p.avg_entry_price) / p.avg_entry_price) * 100
                     : 0;
                 const isPositive = p.unrealized_pnl >= 0;
                 const pnlColor = isPositive ? "text-gain" : "text-loss";
@@ -150,6 +154,17 @@ export default function PositionsPage() {
                       >
                         {p.symbol}
                       </Link>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`text-[10px] font-semibold font-mono uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                          isShort
+                            ? "bg-loss/10 text-loss"
+                            : "bg-gain/10 text-gain"
+                        }`}
+                      >
+                        {isShort ? "short" : "long"}
+                      </span>
                     </td>
                     <td className="px-4 py-3">
                       <span

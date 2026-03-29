@@ -75,10 +75,26 @@ pub struct Bar {
     pub volume: i64,
 }
 
+/// Whether a position is long or short.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum PositionSide {
+    Long,
+    Short,
+}
+
+impl Default for PositionSide {
+    fn default() -> Self {
+        PositionSide::Long
+    }
+}
+
 /// Position tracked in memory and DuckDB.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Position {
     pub symbol: String,
+    #[serde(default)]
+    pub side: PositionSide,
     pub qty: f64,
     pub avg_entry_price: f64,
     pub current_price: f64,

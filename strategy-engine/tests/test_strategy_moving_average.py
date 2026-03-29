@@ -171,24 +171,27 @@ class TestBacktest:
         assert result.total_trades > 0
 
     def test_backtest_with_real_data(self, default_strategy):
-        """Run backtest against actual DuckDB data if available."""
+        """Run backtest against actual SQLite data if available."""
         try:
-            import duckdb
+            import sqlite3
             import os
             db_path = os.environ.get(
-                "DUCKDB_PATH",
-                str(__import__("pathlib").Path(__file__).resolve().parent.parent.parent / "data" / "algotrader.duckdb"),
+                "DB_PATH",
+                os.environ.get("DUCKDB_PATH",
+                               str(__import__("pathlib").Path(__file__).resolve().parent.parent.parent / "data" / "algotrader.sqlite")),
             )
-            con = duckdb.connect(db_path, read_only=True)
-            bars = con.execute(
+            con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            rows = con.execute(
                 "SELECT symbol, timestamp, open, high, low, close, volume "
                 "FROM ohlcv_bars WHERE symbol = 'SPY' AND bar_size = '1d' ORDER BY timestamp"
-            ).fetchdf()
+            ).fetchall()
             con.close()
-            if bars.empty:
-                pytest.skip("No SPY data in DuckDB")
+            if not rows:
+                pytest.skip("No SPY data in database")
+            import pandas as pd
+            bars = pd.DataFrame(rows, columns=["symbol", "timestamp", "open", "high", "low", "close", "volume"])
         except Exception:
-            pytest.skip("DuckDB not available")
+            pytest.skip("Database not available")
 
         result = default_strategy.backtest(bars, "SPY")
         assert result.total_trades > 0

@@ -1,28 +1,28 @@
 """Tests for GET /strategies/{id}/performance endpoint."""
 
+import sqlite3
 from datetime import datetime, timezone, timedelta
 from unittest.mock import patch
 
-import duckdb
 import pytest
 from fastapi.testclient import TestClient
 
 
 @pytest.fixture
 def _mock_db(tmp_path):
-    """Create an in-memory DuckDB with signals table and seed data."""
-    db_path = str(tmp_path / "test.duckdb")
-    con = duckdb.connect(db_path)
+    """Create a test SQLite DB with signals table and seed data."""
+    db_path = str(tmp_path / "test.sqlite")
+    con = sqlite3.connect(db_path)
     con.execute(
         "CREATE TABLE signals ("
-        "  id INTEGER, strategy_name VARCHAR, symbol VARCHAR,"
-        "  timestamp TIMESTAMP, direction VARCHAR, confidence DOUBLE, reason VARCHAR"
+        "  id INTEGER PRIMARY KEY, strategy_name TEXT, symbol TEXT,"
+        "  timestamp TEXT, direction TEXT, confidence REAL, reason TEXT"
         ")"
     )
 
     now = datetime.now(timezone.utc)
-    recent = now - timedelta(days=5)
-    old = now - timedelta(days=60)
+    recent = (now - timedelta(days=5)).isoformat()
+    old = (now - timedelta(days=60)).isoformat()
 
     rows = [
         # Recent signals (within 30 days) for RSIMeanReversion
@@ -39,6 +39,7 @@ def _mock_db(tmp_path):
 
     for r in rows:
         con.execute("INSERT INTO signals VALUES (?, ?, ?, ?, ?, ?, ?)", list(r))
+    con.commit()
     con.close()
 
     with patch("main.DB_PATH", db_path):

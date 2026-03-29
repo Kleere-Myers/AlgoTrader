@@ -87,9 +87,13 @@ impl AlpacaClient {
         symbol: &str,
         limit: usize,
     ) -> Result<Vec<crate::models::Bar>, AlpacaError> {
+        // Calculate start date to ensure we get enough bars (limit + weekends/holidays buffer)
+        let calendar_days = (limit as i64) * 7 / 5 + 30; // ~1.4x for weekends + buffer
+        let start = (chrono::Utc::now() - chrono::Duration::days(calendar_days))
+            .format("%Y-%m-%dT00:00:00Z");
         let url = format!(
-            "https://data.alpaca.markets/v2/stocks/{}/bars?timeframe=1Day&limit={}",
-            symbol, limit
+            "https://data.alpaca.markets/v2/stocks/{}/bars?timeframe=1Day&limit={}&start={}",
+            symbol, limit, start
         );
 
         let resp = self

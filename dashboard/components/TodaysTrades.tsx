@@ -24,9 +24,13 @@ function orderTime(o: Order): string {
 
 /** Parse timestamps that may lack T/Z separators (e.g. "2026-03-23 19:45:03.727") */
 function parseTimestamp(ts: string): Date {
-  // Replace space separator with T for ISO parsing, assume UTC if no timezone
+  // Replace space separator with T for ISO parsing
   const normalized = ts.includes("T") ? ts : ts.replace(" ", "T");
-  return new Date(normalized.endsWith("Z") ? normalized : normalized + "Z");
+  // Only append Z if no timezone info present (no Z, no +/- offset)
+  if (/[Z]$/i.test(normalized) || /[+-]\d{2}:\d{2}$/.test(normalized)) {
+    return new Date(normalized);
+  }
+  return new Date(normalized + "Z");
 }
 
 function pairRoundTrips(orders: Order[]): RoundTrip[] {

@@ -1,5 +1,5 @@
 """
-Ingest 2 years of daily OHLCV bars for all 6 instruments via yfinance into DuckDB.
+Ingest 2 years of daily OHLCV bars for all tracked instruments via yfinance into SQLite.
 
 Usage:
   python scripts/ingest_historical.py [--db-path PATH]
@@ -11,11 +11,11 @@ Period: 2 years from today
 
 import argparse
 import os
+import sqlite3
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import duckdb
 import yfinance as yf
 
 DEFAULT_SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"]
@@ -23,8 +23,9 @@ SYMBOLS = [s.strip().upper() for s in os.environ.get("SYMBOLS", ",".join(DEFAULT
 BAR_SIZE = "1d"
 
 DEFAULT_DB_PATH = os.environ.get(
-    "DUCKDB_PATH",
-    str(Path(__file__).resolve().parent.parent / "data" / "algotrader.duckdb"),
+    "DB_PATH",
+    os.environ.get("DUCKDB_PATH",
+                    str(Path(__file__).resolve().parent.parent / "data" / "algotrader.sqlite")),
 )
 
 
@@ -38,7 +39,7 @@ def ingest(db_path: str) -> None:
     end = datetime.now()
     start = end - timedelta(days=2 * 365)
 
-    con = duckdb.connect(str(path))
+    con = sqlite3.connect(str(path))
     try:
         total_rows = 0
         for symbol in SYMBOLS:
@@ -57,7 +58,7 @@ def ingest(db_path: str) -> None:
             for ts, row in df.iterrows():
                 rows.append((
                     symbol,
-                    ts.to_pydatetime(),
+                    ts.isoformat(),
                     float(row["Open"]),
                     float(row["High"]),
                     float(row["Low"]),
@@ -76,6 +77,7 @@ def ingest(db_path: str) -> None:
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 rows,
             )
+            con.commit()
             total_rows += len(rows)
             print(f"{len(rows)} bars")
 
@@ -91,7 +93,7 @@ def ingest(db_path: str) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Ingest historical OHLCV bars into DuckDB")
-    parser.add_argument("--db-path", default=DEFAULT_DB_PATH, help="Path to DuckDB file")
+    parser = argparse.ArgumentParser(description="Ingest historical OHLCV bars into SQLite")
+    parser.add_argument("--db-path", default=DEFAULT_DB_PATH, help="Path to SQLite file")
     args = parser.parse_args()
     ingest(args.db_path)

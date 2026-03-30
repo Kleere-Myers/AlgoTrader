@@ -10,13 +10,13 @@ A self-hosted automated trading system for day trading and swing trading US equi
 | `execution-engine/` | Rust | Axum | 9101 | Order routing, risk enforcement, WebSocket feeds |
 | `dashboard/` | TypeScript | Next.js 14 | 9102 | Real-time monitoring dashboard |
 
-Services communicate via REST APIs, WebSocket (market data), and SSE (live position/order updates). DuckDB serves as the shared analytics database.
+Services communicate via REST APIs, WebSocket (market data), and SSE (live position/order updates). SQLite (WAL mode) serves as the shared database, with all writes routed through the execution engine.
 
 ```
 ┌─────────────────┐     Signals (REST)      ┌──────────────────┐
 │ Strategy Engine  │ ──────────────────────► │ Execution Engine │
 │  Python/FastAPI  │                         │    Rust/Axum     │
-│                  │◄── Bar Data (DuckDB) ──►│                  │
+│                  │◄── Bar Data (SQLite) ──►│                  │
 └────────┬────────┘                         └────────┬─────────┘
          │                                           │
          │  Market Data APIs                         │  SSE Events
@@ -79,7 +79,7 @@ Yahoo Finance-inspired dark theme with real-time data.
 
 **AI/ML:** LightGBM (signal classification), FinBERT/ProsusAI (news sentiment), Claude Code + MCP (development)
 
-**Backend:** Python 3.12, FastAPI, Rust, Axum, DuckDB
+**Backend:** Python 3.12, FastAPI, Rust, Axum, SQLite
 
 **Frontend:** Next.js 14, Tailwind CSS, Recharts, SSE
 
@@ -144,7 +144,7 @@ ALPACA_SECRET_KEY=        # Alpaca paper trading secret key
 ALPACA_MODE=paper         # paper or live
 STRATEGY_ENGINE_URL=http://localhost:9100
 EXECUTION_ENGINE_URL=http://localhost:9101
-DUCKDB_PATH=../data/algotrader.duckdb
+DB_PATH=../data/algotrader.sqlite
 NEXT_PUBLIC_EXECUTION_URL=http://localhost:9101
 NEXT_PUBLIC_STRATEGY_URL=http://localhost:9100
 ```

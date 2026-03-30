@@ -12,8 +12,11 @@ export interface Signal {
   trade_type?: TradeType;
 }
 
+export type PositionSide = "long" | "short";
+
 export interface Position {
   symbol: string;
+  side?: PositionSide;
   qty: number;
   avg_entry_price: number;
   current_price: number;

@@ -18,7 +18,7 @@ When in doubt, reject — do not execute.
 - **HTTP Framework:** Axum
 - **Async Runtime:** Tokio
 - **Port:** 9101
-- **Database:** DuckDB via `duckdb` crate
+- **Database:** SQLite via `rusqlite` crate (WAL mode)
 - **WebSocket:** tokio-tungstenite (Alpaca market data stream)
 
 ---
@@ -33,7 +33,7 @@ tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
 reqwest = { version = "0.11", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-duckdb = { version = "0.10", features = ["bundled"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
 dotenvy = "0.15"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -53,8 +53,8 @@ execution-engine/src/
   alpaca.rs        # Alpaca REST client + WebSocket market data feed
   risk.rs          # Risk rule enforcement — the safety gate
   orders.rs        # Order construction and submission to Alpaca
-  positions.rs     # In-memory position state + DuckDB sync
-  db.rs            # DuckDB connection pool and query helpers
+  positions.rs     # In-memory position state + SQLite sync
+  db.rs            # SQLite connection pool and query helpers
   sse.rs           # Server-Sent Events broadcaster for dashboard
   models.rs        # Shared Rust structs (Signal, Order, Position, etc.)
   scheduler.rs     # Market hours logic, EOD flatten job
@@ -160,7 +160,7 @@ pub enum RiskDecision {
 7. Was an order submitted for this symbol within throttle window? → Reject
 8. All checks passed → Approved
 
-Log every rejection with reason to tracing and write to DuckDB `signals` table.
+Log every rejection with reason to tracing and write to SQLite `signals` table.
 
 ---
 
@@ -200,7 +200,7 @@ Subscribe to 5-minute bars for all 6 instruments on connect:
 {"action": "subscribe", "bars": ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"]}
 ```
 On each bar received:
-1. Upsert to DuckDB `ohlcv_bars`
+1. Upsert to SQLite `ohlcv_bars`
 2. POST bar to Strategy Engine `POST /signal`
 3. For each signal returned: run risk check → submit order if approved
 
@@ -211,7 +211,7 @@ On each bar received:
 | Method | Path | Description |
 |---|---|---|
 | GET | /positions | Current open positions with unrealized P&L |
-| GET | /orders | Last 100 orders from DuckDB |
+| GET | /orders | Last 100 orders from SQLite |
 | GET | /account | Equity, buying power, today's realized P&L |
 | POST | /trading/halt | Set trading_halted = true, broadcast SSE TradingHalted |
 | POST | /trading/resume | Set trading_halted = false, broadcast SSE TradingResumed |
@@ -292,9 +292,9 @@ Tables you never modify:
 ```
 1. Load .env via dotenvy
 2. Initialize tracing subscriber
-3. Connect to DuckDB
+3. Connect to SQLite (WAL mode)
 4. Fetch Alpaca account — verify auth works
-5. Load positions from DuckDB, then sync with Alpaca /v2/positions
+5. Load positions from SQLite, then sync with Alpaca /v2/positions
    (corrects qty/price drift, adds missing positions, removes stale ones)
 6. Build shared AppState
 7. Launch WebSocket feed connection (spawn Tokio task)
@@ -327,5 +327,5 @@ in a degraded state.
 - Any change to the SseEvent format
 - Any loosening of risk rules
 - Any change that affects how orders are submitted (new order types, etc.)
-- Any change to the DuckDB schema
+- Any change to the SQLite schema
 - Any change to the Alpaca base URL selection logic

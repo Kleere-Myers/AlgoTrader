@@ -1,5 +1,5 @@
 """
-Run MovingAverageCrossover backtest against all 6 instruments in DuckDB.
+Run MovingAverageCrossover backtest against all 6 instruments in SQLite.
 
 Usage:
   python scripts/run_backtest.py [--db-path PATH]
@@ -7,13 +7,13 @@ Usage:
 
 import argparse
 import os
+import sqlite3
 import sys
 from pathlib import Path
 
 # Add strategy-engine to path so we can import strategies
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "strategy-engine"))
 
-import duckdb
 import pandas as pd
 
 from strategies.strategy_moving_average import MovingAverageCrossover
@@ -22,13 +22,14 @@ DEFAULT_SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"]
 SYMBOLS = [s.strip().upper() for s in os.environ.get("SYMBOLS", ",".join(DEFAULT_SYMBOLS)).split(",") if s.strip()]
 
 DEFAULT_DB_PATH = os.environ.get(
-    "DUCKDB_PATH",
-    str(Path(__file__).resolve().parent.parent / "data" / "algotrader.duckdb"),
+    "DB_PATH",
+    os.environ.get("DUCKDB_PATH",
+                    str(Path(__file__).resolve().parent.parent / "data" / "algotrader.sqlite")),
 )
 
 
 def main(db_path: str) -> None:
-    con = duckdb.connect(db_path, read_only=True)
+    con = sqlite3.connect(db_path)
     strategy = MovingAverageCrossover(fast_period=10, slow_period=30)
 
     print(f"Strategy: {strategy.name}")
@@ -38,16 +39,17 @@ def main(db_path: str) -> None:
 
     results = []
     for symbol in SYMBOLS:
-        bars = con.execute(
+        rows = con.execute(
             "SELECT symbol, timestamp, open, high, low, close, volume "
             "FROM ohlcv_bars WHERE symbol = ? AND bar_size = '1d' ORDER BY timestamp",
             [symbol],
-        ).fetchdf()
+        ).fetchall()
 
-        if bars.empty:
+        if not rows:
             print(f"{symbol:<8} — no data")
             continue
 
+        bars = pd.DataFrame(rows, columns=["symbol", "timestamp", "open", "high", "low", "close", "volume"])
         result = strategy.backtest(bars, symbol)
         results.append(result)
 
@@ -70,6 +72,6 @@ def main(db_path: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run MovingAverageCrossover backtest")
-    parser.add_argument("--db-path", default=DEFAULT_DB_PATH, help="Path to DuckDB file")
+    parser.add_argument("--db-path", default=DEFAULT_DB_PATH, help="Path to SQLite file")
     args = parser.parse_args()
     main(args.db_path)

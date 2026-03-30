@@ -10,12 +10,13 @@ mod sse;
 use std::sync::Arc;
 
 use axum::{
-    extract::State,
-    routing::{get, post},
+    extract::{Path, State},
+    routing::{delete, get, post},
     Json, Router,
 };
 use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
+use serde::Deserialize;
 use tracing::{error, info, warn};
 
 use alpaca::{AlpacaClient, AlpacaConfig};
@@ -34,12 +35,31 @@ pub struct AppState {
     pub daily_pnl: Mutex<f64>,
     pub account_equity: Mutex<f64>,
     pub strategy_engine_url: String,
-    pub symbols: Vec<String>,
+    pub symbols: Mutex<Vec<String>>,
 }
 
-fn load_symbols() -> Vec<String> {
-    let default = "SPY,QQQ,AAPL,MSFT,NVDA,GOOGL".to_string();
-    let raw = std::env::var("SYMBOLS").unwrap_or(default);
+async fn load_symbols(strategy_engine_url: &str) -> Vec<String> {
+    let env_default = "SPY,QQQ,AAPL,MSFT,NVDA,GOOGL".to_string();
+
+    // Try fetching symbols from the strategy engine first
+    let url = format!("{}/symbols", strategy_engine_url);
+    let client = reqwest::Client::new();
+    if let Ok(resp) = client.get(&url).timeout(std::time::Duration::from_secs(5)).send().await {
+        if let Ok(data) = resp.json::<serde_json::Value>().await {
+            if let Some(symbols) = data.get("symbols").and_then(|v| v.as_array()) {
+                let syms: Vec<String> = symbols
+                    .iter()
+                    .filter_map(|v| v.as_str().map(|s: &str| s.to_uppercase()))
+                    .collect();
+                if !syms.is_empty() {
+                    return syms;
+                }
+            }
+        }
+    }
+
+    // Fall back to SYMBOLS env var or default
+    let raw = std::env::var("SYMBOLS").unwrap_or(env_default);
     raw.split(',')
         .map(|s| s.trim().to_uppercase())
         .filter(|s| !s.is_empty())
@@ -164,8 +184,8 @@ async fn main() {
     let strategy_engine_url = std::env::var("STRATEGY_ENGINE_URL")
         .unwrap_or_else(|_| "http://localhost:9100".into());
 
-    let symbols = load_symbols();
-    info!(symbols = ?symbols, "Loaded symbol list");
+    let symbols = load_symbols(&strategy_engine_url).await;
+    info!(symbols = ?symbols, "Loaded symbol list from strategy engine");
 
     // 6. Build shared state
     let state = Arc::new(AppState {
@@ -177,7 +197,7 @@ async fn main() {
         daily_pnl: Mutex::new(0.0),
         account_equity: Mutex::new(equity),
         strategy_engine_url,
-        symbols,
+        symbols: Mutex::new(symbols),
     });
 
     // 7. Spawn WebSocket bar ingestion task
@@ -210,6 +230,12 @@ async fn main() {
         scheduler::quote_refresh_loop(quote_state).await;
     });
 
+    // 8e. Spawn symbol sync loop (syncs with strategy engine every 5 min)
+    let sym_state = state.clone();
+    tokio::spawn(async move {
+        scheduler::symbol_sync_loop(sym_state).await;
+    });
+
     // 9. Build Axum router
     let cors = CorsLayer::new()
         .allow_origin("http://localhost:9102".parse::<axum::http::HeaderValue>().unwrap())
@@ -227,6 +253,9 @@ async fn main() {
         .route("/risk/swing-config", get(get_swing_risk_config).patch(patch_swing_risk_config))
         .route("/positions/day", get(get_day_positions))
         .route("/positions/swing", get(get_swing_positions))
+        .route("/db/signals", post(post_db_signals))
+        .route("/db/watched-symbols", post(post_db_watched_symbol))
+        .route("/db/watched-symbols/:symbol", delete(delete_db_watched_symbol))
         .route("/stream/events", get(stream_events))
         .layer(cors)
         .with_state(state);
@@ -281,9 +310,10 @@ async fn websocket_loop(state: Arc<AppState>) {
         }
 
         // Subscribe to bars
+        let current_symbols = state.symbols.lock().await.clone();
         let sub_msg = serde_json::json!({
             "action": "subscribe",
-            "bars": state.symbols,
+            "bars": current_symbols,
         });
         if ws.send(Message::Text(sub_msg.to_string())).await.is_err() {
             error!("Failed to send subscribe message");
@@ -297,8 +327,20 @@ async fn websocket_loop(state: Arc<AppState>) {
 
         info!("WebSocket connected and subscribed to bars");
 
-        // Process incoming messages
-        while let Some(msg_result) = ws.next().await {
+        // Process incoming messages (10-min read timeout detects stale connections)
+        let read_timeout = std::time::Duration::from_secs(600);
+        loop {
+            let msg_result = match tokio::time::timeout(read_timeout, ws.next()).await {
+                Ok(Some(r)) => r,
+                Ok(None) => {
+                    warn!("WebSocket stream ended (server closed)");
+                    break;
+                }
+                Err(_) => {
+                    warn!("WebSocket read timeout (no data for 10 min) — reconnecting");
+                    break;
+                }
+            };
             let msg = match msg_result {
                 Ok(m) => m,
                 Err(e) => {
@@ -345,7 +387,7 @@ async fn websocket_loop(state: Arc<AppState>) {
 
                 info!(symbol = %bar.symbol, close = bar.close, "Received bar");
 
-                // Upsert to DuckDB
+                // Upsert to database
                 match db::connect() {
                     Ok(con) => {
                         if let Err(e) = db::upsert_bar(&con, &bar, "5min") {
@@ -353,7 +395,7 @@ async fn websocket_loop(state: Arc<AppState>) {
                         }
                     }
                     Err(e) => {
-                        error!("Failed to connect to DuckDB for bar upsert: {e}");
+                        error!("Failed to connect to database for bar upsert: {e}");
                     }
                 }
 
@@ -369,6 +411,13 @@ async fn websocket_loop(state: Arc<AppState>) {
 
 /// Send bar to strategy engine, evaluate signals through risk, submit orders.
 async fn process_bar(state: &Arc<AppState>, bar: &Bar) {
+    // Skip signal processing after EOD flatten time to avoid reopening positions
+    let now_et = chrono::Utc::now().with_timezone(&chrono_tz::America::New_York);
+    let flatten_time = chrono::NaiveTime::from_hms_opt(15, 45, 0).unwrap();
+    if now_et.time() >= flatten_time {
+        return;
+    }
+
     let http = reqwest::Client::new();
 
     // Fetch recent bars from DuckDB for this symbol to give strategy context
@@ -643,6 +692,109 @@ async fn get_orders(
     Json(orders)
 }
 
+// --- DB proxy endpoints (strategy engine writes through these) ---
+
+#[derive(Debug, Deserialize)]
+struct SignalInsert {
+    strategy_name: String,
+    symbol: String,
+    timestamp: String,
+    direction: String,
+    confidence: f64,
+    reason: String,
+    #[serde(default = "default_trade_type_str")]
+    trade_type: String,
+}
+
+fn default_trade_type_str() -> String {
+    "day".to_string()
+}
+
+#[derive(Debug, Deserialize)]
+struct SignalBatch {
+    signals: Vec<SignalInsert>,
+}
+
+async fn post_db_signals(
+    State(_state): State<Arc<AppState>>,
+    Json(batch): Json<SignalBatch>,
+) -> Json<serde_json::Value> {
+    let con = match db::connect() {
+        Ok(c) => c,
+        Err(e) => {
+            error!("DB connect failed for signal insert: {e}");
+            return Json(serde_json::json!({"error": format!("{e}"), "inserted": 0}));
+        }
+    };
+    let mut inserted = 0;
+    for sig in &batch.signals {
+        if let Err(e) = db::insert_signal(
+            &con,
+            &sig.strategy_name,
+            &sig.symbol,
+            &sig.timestamp,
+            &sig.direction,
+            sig.confidence,
+            &sig.reason,
+            &sig.trade_type,
+        ) {
+            error!(strategy = %sig.strategy_name, symbol = %sig.symbol, "Failed to insert signal: {e}");
+        } else {
+            inserted += 1;
+        }
+    }
+    Json(serde_json::json!({"inserted": inserted}))
+}
+
+#[derive(Debug, Deserialize)]
+struct WatchedSymbolReq {
+    symbol: String,
+}
+
+async fn post_db_watched_symbol(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<WatchedSymbolReq>,
+) -> Json<serde_json::Value> {
+    let symbol = req.symbol.trim().to_uppercase();
+    let con = match db::connect() {
+        Ok(c) => c,
+        Err(e) => {
+            error!("DB connect failed for watched_symbols insert: {e}");
+            return Json(serde_json::json!({"error": format!("{e}")}));
+        }
+    };
+    if let Err(e) = db::add_watched_symbol(&con, &symbol) {
+        error!("Failed to add watched symbol {symbol}: {e}");
+        return Json(serde_json::json!({"error": format!("{e}")}));
+    }
+    info!("Watched symbol added via proxy: {symbol}");
+    Json(serde_json::json!({"status": "ok", "symbol": symbol}))
+}
+
+async fn delete_db_watched_symbol(
+    State(_state): State<Arc<AppState>>,
+    Path(symbol): Path<String>,
+) -> Json<serde_json::Value> {
+    let symbol = symbol.trim().to_uppercase();
+    let con = match db::connect() {
+        Ok(c) => c,
+        Err(e) => {
+            error!("DB connect failed for watched_symbols delete: {e}");
+            return Json(serde_json::json!({"error": format!("{e}")}));
+        }
+    };
+    match db::remove_watched_symbol(&con, &symbol) {
+        Ok(n) => {
+            info!("Watched symbol removed via proxy: {symbol} (rows: {n})");
+            Json(serde_json::json!({"status": "ok", "symbol": symbol, "deleted": n}))
+        }
+        Err(e) => {
+            error!("Failed to remove watched symbol {symbol}: {e}");
+            Json(serde_json::json!({"error": format!("{e}")}))
+        }
+    }
+}
+
 async fn halt_trading(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     *state.trading_halted.lock().await = true;
     state.broadcaster.send(SseEvent {
@@ -903,7 +1055,7 @@ mod risk_config_tests {
             daily_pnl: Mutex::new(0.0),
             account_equity: Mutex::new(100_000.0),
             strategy_engine_url: "http://localhost:9100".into(),
-            symbols: vec!["SPY".into(), "QQQ".into(), "AAPL".into(), "MSFT".into(), "NVDA".into(), "GOOGL".into()],
+            symbols: Mutex::new(vec!["SPY".into(), "QQQ".into(), "AAPL".into(), "MSFT".into(), "NVDA".into(), "GOOGL".into()]),
         })
     }
 

@@ -7,7 +7,7 @@ You do not modify files in `strategy-engine/` or `execution-engine/` unless
 explicitly asked, and you flag any change that touches a shared contract first.
 
 You are a read-only consumer of both backend services.
-You never write to DuckDB directly. All data comes through the service APIs.
+You never write to the database directly. All data comes through the service APIs.
 
 **Before making ANY UI changes, run `/styling` to load the design system reference.**
 
@@ -181,5 +181,5 @@ Recharts cannot use Tailwind classes — use inline hex values:
 - Any change to SSE event format in `useSseEvents.ts`
 - Any new page requiring a new backend API endpoint
 - Any new dependency over 50KB
-- Any attempt to write data directly to DuckDB or call Alpaca directly
+- Any attempt to write data directly to the database or call Alpaca directly
 - Any deviation from the Yahoo Finance dark theme (run `/styling` first)

@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import duckdb
+import sqlite3
+import httpx
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -27,12 +28,31 @@ from strategies.composite_scorer import CompositeScorer
 logger = logging.getLogger(__name__)
 
 DB_PATH = os.environ.get(
-    "DUCKDB_PATH",
-    str(Path(__file__).resolve().parent.parent / "data" / "algotrader.duckdb"),
+    "DB_PATH",
+    os.environ.get("DUCKDB_PATH",  # backward compat
+                    str(Path(__file__).resolve().parent.parent / "data" / "algotrader.sqlite")),
 )
 
+EXECUTION_ENGINE_URL = os.environ.get("EXECUTION_ENGINE_URL", "http://localhost:9101")
+
 DEFAULT_SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GOOGL"]
-SYMBOLS = [s.strip().upper() for s in os.environ.get("SYMBOLS", ",".join(DEFAULT_SYMBOLS)).split(",") if s.strip()]
+
+
+def _load_symbols_from_db() -> list[str]:
+    """Load watched symbols from SQLite. Falls back to DEFAULT_SYMBOLS on error."""
+    try:
+        con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+        rows = con.execute("SELECT symbol FROM watched_symbols ORDER BY added_at").fetchall()
+        con.close()
+        if rows:
+            logger.info("Loaded %d symbols from DB", len(rows))
+            return [r[0] for r in rows]
+    except Exception as e:
+        logger.warning("Could not load symbols from DB: %s — using defaults", e)
+    return list(DEFAULT_SYMBOLS)
+
+
+SYMBOLS = _load_symbols_from_db()
 
 # Strategy registry — add new strategies here
 _ml_strategy = MLSignalGenerator()
@@ -107,7 +127,21 @@ def _cache_key(strategy: str, symbol: str) -> str:
 
 
 def _get_db(read_only: bool = True):
-    return duckdb.connect(DB_PATH, read_only=read_only)
+    # All DB access from strategy engine is read-only to prevent corruption.
+    # Writes are proxied through the execution engine's /db/* endpoints.
+    return sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+
+
+def _proxy_write_signals(signals: list[dict]) -> None:
+    """Send signals to execution engine for DB insertion."""
+    try:
+        httpx.post(
+            f"{EXECUTION_ENGINE_URL}/db/signals",
+            json={"signals": signals},
+            timeout=5,
+        )
+    except Exception as e:
+        logger.warning("Failed to proxy signal write to execution engine: %s", e)
 
 
 # --- POST /signal models ---
@@ -152,6 +186,14 @@ def add_symbol(req: SymbolRequest):
     if symbol in SYMBOLS:
         raise HTTPException(status_code=409, detail=f"Symbol '{symbol}' already exists")
     SYMBOLS.append(symbol)
+    try:
+        httpx.post(
+            f"{EXECUTION_ENGINE_URL}/db/watched-symbols",
+            json={"symbol": symbol},
+            timeout=5,
+        )
+    except Exception as e:
+        logger.warning("Failed to proxy watched_symbols write: %s", e)
     logger.info("Symbol added: %s — active list: %s", symbol, SYMBOLS)
     return {"symbols": SYMBOLS}
 
@@ -164,6 +206,13 @@ def remove_symbol(symbol: str):
     if len(SYMBOLS) <= 1:
         raise HTTPException(status_code=400, detail="Cannot remove the last symbol")
     SYMBOLS.remove(symbol)
+    try:
+        httpx.delete(
+            f"{EXECUTION_ENGINE_URL}/db/watched-symbols/{symbol}",
+            timeout=5,
+        )
+    except Exception as e:
+        logger.warning("Failed to proxy watched_symbols delete: %s", e)
     logger.info("Symbol removed: %s — active list: %s", symbol, SYMBOLS)
     return {"symbols": SYMBOLS}
 
@@ -286,19 +335,8 @@ def generate_signals(req: SignalRequest):
             )
         signals.append(sig.to_dict())
 
-    # Write signals to DuckDB for audit trail
-    con = _get_db(read_only=False)
-    try:
-        for sig in signals:
-            con.execute(
-                "INSERT INTO signals (strategy_name, symbol, timestamp, direction, confidence, reason, trade_type) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                [sig["strategy_name"], sig["symbol"], sig["timestamp"],
-                 sig["direction"], sig["confidence"], sig["reason"],
-                 sig.get("trade_type", "day")],
-            )
-    finally:
-        con.close()
+    # Proxy signal writes through execution engine to avoid concurrent DuckDB access
+    _proxy_write_signals(signals)
 
     return {"signals": signals}
 
@@ -353,20 +391,9 @@ def generate_swing_signal(req: SwingSignalRequest):
     # Composite scoring
     composite = _composite_scorer.score(symbol, individual_signals)
 
-    # Write all signals to DuckDB for audit trail
+    # Proxy signal writes through execution engine to avoid concurrent DuckDB access
     all_signals = [composite.to_dict()] + [s.to_dict() for s in individual_signals.values()]
-    con = _get_db(read_only=False)
-    try:
-        for sig in all_signals:
-            con.execute(
-                "INSERT INTO signals (strategy_name, symbol, timestamp, direction, confidence, reason, trade_type) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                [sig["strategy_name"], sig["symbol"], sig["timestamp"],
-                 sig["direction"], sig["confidence"], sig["reason"],
-                 sig.get("trade_type", "swing")],
-            )
-    finally:
-        con.close()
+    _proxy_write_signals(all_signals)
 
     return {
         "composite": composite.to_dict(),
@@ -382,14 +409,15 @@ def run_backtest(strategy: str, symbol: str):
     symbol = symbol.upper()
     con = _get_db()
     try:
-        bars = con.execute(
+        rows = con.execute(
             "SELECT symbol, timestamp, open, high, low, close, volume "
             "FROM ohlcv_bars WHERE symbol = ? AND bar_size = '1d' ORDER BY timestamp",
             [symbol],
-        ).fetchdf()
+        ).fetchall()
     finally:
         con.close()
 
+    bars = pd.DataFrame(rows, columns=["symbol", "timestamp", "open", "high", "low", "close", "volume"])
     if bars.empty:
         raise HTTPException(status_code=404, detail=f"No OHLCV data for symbol '{symbol}'")
 
@@ -423,14 +451,14 @@ def get_strategy_performance(strategy_id: str):
             "  count(*) FILTER (WHERE direction = 'HOLD') AS hold_signals, "
             "  coalesce(avg(confidence), 0) AS avg_confidence "
             "FROM signals "
-            "WHERE strategy_name = ? AND timestamp >= current_date - INTERVAL '30 days'",
+            "WHERE strategy_name = ? AND timestamp >= datetime('now', '-30 days')",
             [strategy_id],
         ).fetchone()
 
         by_symbol_rows = con.execute(
             "SELECT symbol, count(*) AS cnt "
             "FROM signals "
-            "WHERE strategy_name = ? AND timestamp >= current_date - INTERVAL '30 days' "
+            "WHERE strategy_name = ? AND timestamp >= datetime('now', '-30 days') "
             "GROUP BY symbol ORDER BY symbol",
             [strategy_id],
         ).fetchall()

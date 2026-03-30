@@ -5,7 +5,7 @@ use chrono_tz::America::New_York;
 use tracing::{error, info, warn};
 
 use crate::db;
-use crate::models::{Order, SseEvent, SseEventType, SwingSignalRequest, SwingSignalResponse, TradeType};
+use crate::models::{Order, PositionSide, SseEvent, SseEventType, SwingSignalRequest, SwingSignalResponse, TradeType};
 use crate::risk::SwingRiskContext;
 use crate::AppState;
 
@@ -78,9 +78,16 @@ pub async fn eod_flatten_loop(state: Arc<AppState>) {
         }
 
         for pos in &positions {
+            // Close direction: sell longs, buy to cover shorts
+            let close_side = match pos.side {
+                PositionSide::Long => "sell",
+                PositionSide::Short => "buy",
+            };
+
             info!(
                 symbol = %pos.symbol,
                 qty = pos.qty,
+                side = close_side,
                 reason = "EOD_AUTO_FLATTEN",
                 "Flattening position"
             );
@@ -88,14 +95,14 @@ pub async fn eod_flatten_loop(state: Arc<AppState>) {
             let qty = pos.qty;
             let symbol = &pos.symbol;
 
-            match state.alpaca.submit_market_order(symbol, qty, "sell").await {
+            match state.alpaca.submit_market_order(symbol, qty, close_side).await {
                 Ok(alpaca_order) => {
                     let now = chrono::Utc::now().to_rfc3339();
                     let order = Order {
                         order_id: uuid::Uuid::new_v4().to_string(),
                         alpaca_id: Some(alpaca_order.id.clone()),
                         symbol: symbol.clone(),
-                        side: "sell".to_string(),
+                        side: close_side.to_string(),
                         qty,
                         filled_price: alpaca_order
                             .filled_avg_price
@@ -121,7 +128,7 @@ pub async fn eod_flatten_loop(state: Arc<AppState>) {
                         &state,
                         &alpaca_order.id,
                         &order.order_id,
-                        "sell",
+                        close_side,
                         qty,
                         symbol,
                     )
@@ -130,7 +137,7 @@ pub async fn eod_flatten_loop(state: Arc<AppState>) {
                     // Update position tracker
                     {
                         let mut tracker = state.positions.lock().await;
-                        let updated = tracker.update_on_fill(symbol, "sell", qty, fill_price.unwrap_or(0.0), crate::models::TradeType::Day, None, None);
+                        let updated = tracker.update_on_fill(symbol, close_side, qty, fill_price.unwrap_or(0.0), crate::models::TradeType::Day, None, None);
                         if let Ok(con) = db::connect() {
                             match updated {
                                 Some(ref p) => {
@@ -185,15 +192,15 @@ pub async fn eod_flatten_loop(state: Arc<AppState>) {
                     };
 
                     if let Some(actual_qty) = retry_qty {
-                        info!(symbol, actual_qty, "Retrying flatten with synced qty");
-                        match state.alpaca.submit_market_order(symbol, actual_qty, "sell").await {
+                        info!(symbol, actual_qty, side = close_side, "Retrying flatten with synced qty");
+                        match state.alpaca.submit_market_order(symbol, actual_qty, close_side).await {
                             Ok(alpaca_order) => {
                                 let now = chrono::Utc::now().to_rfc3339();
                                 let order = Order {
                                     order_id: uuid::Uuid::new_v4().to_string(),
                                     alpaca_id: Some(alpaca_order.id.clone()),
                                     symbol: symbol.clone(),
-                                    side: "sell".to_string(),
+                                    side: close_side.to_string(),
                                     qty: actual_qty,
                                     filled_price: alpaca_order.filled_avg_price.as_ref().and_then(|p| p.parse::<f64>().ok()),
                                     status: alpaca_order.status.clone(),
@@ -208,12 +215,12 @@ pub async fn eod_flatten_loop(state: Arc<AppState>) {
                                 state.risk_engine.lock().await.record_order(symbol);
 
                                 let fill_price = crate::poll_for_fill(
-                                    &state, &alpaca_order.id, &order.order_id, "sell", actual_qty, symbol,
+                                    &state, &alpaca_order.id, &order.order_id, close_side, actual_qty, symbol,
                                 ).await;
 
                                 {
                                     let mut tracker = state.positions.lock().await;
-                                    let updated = tracker.update_on_fill(symbol, "sell", actual_qty, fill_price.unwrap_or(0.0), crate::models::TradeType::Day, None, None);
+                                    let updated = tracker.update_on_fill(symbol, close_side, actual_qty, fill_price.unwrap_or(0.0), crate::models::TradeType::Day, None, None);
                                     if let Ok(con) = db::connect() {
                                         match updated {
                                             Some(ref p) => { let _ = db::upsert_position(&con, p); }
@@ -296,8 +303,9 @@ pub async fn daily_swing_signal_loop(state: Arc<AppState>) {
         triggered_today = Some(today);
 
         let http = reqwest::Client::new();
+        let symbols = state.symbols.lock().await.clone();
 
-        for symbol in &state.symbols {
+        for symbol in &symbols {
             // Fetch daily bars from Alpaca (last 150 for weekly EMA lookback)
             let bars = match state.alpaca.get_daily_bars(symbol, 150).await {
                 Ok(b) => b,
@@ -551,32 +559,40 @@ pub async fn swing_stop_check_loop(state: Arc<AppState>) {
                 _ => continue,
             };
 
-            let hit_stop = current_price <= stop_loss;
-            let hit_take = current_price >= take_profit;
+            // Stop/take logic depends on position side
+            let (hit_stop, hit_take) = match pos.side {
+                PositionSide::Long => (current_price <= stop_loss, current_price >= take_profit),
+                PositionSide::Short => (current_price >= stop_loss, current_price <= take_profit),
+            };
 
             if !hit_stop && !hit_take {
                 continue;
             }
 
             let reason = if hit_stop { "STOP_LOSS" } else { "TAKE_PROFIT" };
+            let close_side = match pos.side {
+                PositionSide::Long => "sell",
+                PositionSide::Short => "buy",
+            };
             info!(
                 symbol = %pos.symbol,
                 current_price,
                 stop_loss,
                 take_profit,
                 reason,
+                side = close_side,
                 "Swing position exit triggered"
             );
 
             // Close position
-            match state.alpaca.submit_market_order(&pos.symbol, pos.qty, "sell").await {
+            match state.alpaca.submit_market_order(&pos.symbol, pos.qty, close_side).await {
                 Ok(alpaca_order) => {
                     let now = chrono::Utc::now().to_rfc3339();
                     let order = Order {
                         order_id: uuid::Uuid::new_v4().to_string(),
                         alpaca_id: Some(alpaca_order.id.clone()),
                         symbol: pos.symbol.clone(),
-                        side: "sell".to_string(),
+                        side: close_side.to_string(),
                         qty: pos.qty,
                         filled_price: alpaca_order.filled_avg_price.as_ref().and_then(|p| p.parse::<f64>().ok()),
                         status: alpaca_order.status.clone(),
@@ -593,13 +609,13 @@ pub async fn swing_stop_check_loop(state: Arc<AppState>) {
                     }
 
                     let fill_price = crate::poll_for_fill(
-                        &state, &alpaca_order.id, &order.order_id, "sell", pos.qty, &pos.symbol,
+                        &state, &alpaca_order.id, &order.order_id, close_side, pos.qty, &pos.symbol,
                     ).await;
 
                     {
                         let mut tracker = state.positions.lock().await;
                         let updated = tracker.update_on_fill(
-                            &pos.symbol, "sell", pos.qty, fill_price.unwrap_or(0.0),
+                            &pos.symbol, close_side, pos.qty, fill_price.unwrap_or(0.0),
                             TradeType::Swing, None, None,
                         );
                         if let Ok(con) = db::connect() {
@@ -734,6 +750,55 @@ pub async fn quote_refresh_loop(state: Arc<AppState>) {
                         "unrealized_pnl": updated.unrealized_pnl,
                     }),
                 });
+            }
+        }
+    }
+}
+
+/// Background task: syncs symbol list from strategy engine every 5 minutes.
+/// New symbols are automatically picked up without restarting.
+pub async fn symbol_sync_loop(state: Arc<AppState>) {
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+
+        let url = format!("{}/symbols", state.strategy_engine_url);
+        let client = reqwest::Client::new();
+        let resp = match client.get(&url).timeout(std::time::Duration::from_secs(5)).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                warn!("Symbol sync failed: {e}");
+                continue;
+            }
+        };
+
+        let data: serde_json::Value = match resp.json().await {
+            Ok(d) => d,
+            Err(e) => {
+                warn!("Symbol sync parse failed: {e}");
+                continue;
+            }
+        };
+
+        if let Some(arr) = data.get("symbols").and_then(|v| v.as_array()) {
+            let new_syms: Vec<String> = arr
+                .iter()
+                .filter_map(|v| v.as_str().map(|s: &str| s.to_uppercase()))
+                .collect();
+
+            if new_syms.is_empty() {
+                continue;
+            }
+
+            let mut current = state.symbols.lock().await;
+            if *current != new_syms {
+                let added: Vec<&String> = new_syms.iter().filter(|s| !current.contains(s)).collect();
+                let removed: Vec<&String> = current.iter().filter(|s| !new_syms.contains(s)).collect();
+                info!(
+                    added = ?added,
+                    removed = ?removed,
+                    "Symbol list updated from strategy engine"
+                );
+                *current = new_syms;
             }
         }
     }

@@ -16,8 +16,9 @@ from strategies.base import BaseStrategy, BacktestResult, Signal
 logger = logging.getLogger(__name__)
 
 DB_PATH = os.environ.get(
-    "DUCKDB_PATH",
-    str(Path(__file__).resolve().parent.parent.parent / "data" / "algotrader.duckdb"),
+    "DB_PATH",
+    os.environ.get("DUCKDB_PATH",
+                    str(Path(__file__).resolve().parent.parent.parent / "data" / "algotrader.sqlite")),
 )
 
 
@@ -45,20 +46,21 @@ class RelativeStrengthRanking(BaseStrategy):
         }
 
     def _fetch_benchmark_bars(self) -> pd.DataFrame | None:
-        """Fetch benchmark (SPY) daily bars from DuckDB."""
+        """Fetch benchmark (SPY) daily bars from SQLite."""
         try:
-            import duckdb
-            con = duckdb.connect(DB_PATH, read_only=True)
+            import sqlite3
+            con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
             try:
-                df = con.execute(
+                rows = con.execute(
                     "SELECT timestamp, close FROM ohlcv_bars "
                     "WHERE symbol = ? AND bar_size = '1d' ORDER BY timestamp",
                     [self.benchmark],
-                ).fetchdf()
+                ).fetchall()
             finally:
                 con.close()
-            if df.empty:
+            if not rows:
                 return None
+            df = pd.DataFrame(rows, columns=["timestamp", "close"])
             df["timestamp"] = pd.to_datetime(df["timestamp"])
             return df
         except Exception as e:
@@ -68,13 +70,14 @@ class RelativeStrengthRanking(BaseStrategy):
     def _fetch_all_symbol_returns(self) -> dict[str, float] | None:
         """Fetch rolling returns for all symbols to compute rankings."""
         try:
-            import duckdb
-            con = duckdb.connect(DB_PATH, read_only=True)
+            import sqlite3
+            con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
             try:
-                df = con.execute(
+                rows = con.execute(
                     "SELECT symbol, timestamp, close FROM ohlcv_bars "
                     "WHERE bar_size = '1d' ORDER BY symbol, timestamp",
-                ).fetchdf()
+                ).fetchall()
+                df = pd.DataFrame(rows, columns=["symbol", "timestamp", "close"])
             finally:
                 con.close()
             if df.empty:

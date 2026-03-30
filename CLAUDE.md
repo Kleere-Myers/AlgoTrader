@@ -18,7 +18,7 @@ and validate the shared contracts before splitting responsibilities.
 The shared contracts are not stable until ALL of the following are true:
 - [x] BaseStrategy interface is implemented and tested
 - [x] Signal struct is in use end-to-end (Python → Rust)
-- [x] DuckDB schema is initialized and both services are reading/writing it
+- [x] SQLite schema is initialized and both services are reading/writing it
 - [x] SSE event format is confirmed working in the dashboard
 - [x] At least one strategy is paper trading successfully end-to-end
 
@@ -77,21 +77,20 @@ Consumed by: dashboard
 }
 ```
 
-### 3. DuckDB Schema
-Shared by: strategy-engine (read/write) and execution-engine (read/write)
+### 3. SQLite Schema
+Shared by: strategy-engine (read-only) and execution-engine (read/write)
 Dashboard never writes to the database directly — only reads via service APIs.
 
-Tables: `ohlcv_bars`, `signals`, `orders`, `positions`, `daily_pnl`, `strategy_config`
+All database writes go through the execution engine. The strategy engine connects
+read-only and proxies writes via `POST /db/signals` and `POST/DELETE /db/watched-symbols`
+on the execution engine. This prevents concurrent-write corruption.
+
+Tables: `ohlcv_bars`, `signals`, `orders`, `positions`, `daily_pnl`, `strategy_config`, `watched_symbols`
 Schema definition: `scripts/init_db.py`
-Database file: `data/algotrader.duckdb` (gitignored)
+Database file: `data/algotrader.sqlite` (gitignored)
 
-**DuckDB version MUST match across both services.** Currently pinned to **1.2.x**
-(`duckdb = "1.1"` in Cargo.toml resolves to 1.2.2; `duckdb>=1.2,<1.3` in requirements.txt).
-Mismatched versions cause silent storage-format incompatibility — bars won't persist.
-
-**Rust DuckDB queries must CAST TIMESTAMP columns to VARCHAR** before reading into
-String fields (e.g. `CAST(timestamp AS VARCHAR)`). The 1.2 Rust driver does not
-auto-coerce TIMESTAMP → String like 0.10 did.
+SQLite WAL mode is enabled on connect (`PRAGMA journal_mode=WAL`) for concurrent
+read access while the execution engine writes.
 
 ---
 
@@ -103,7 +102,7 @@ ALPACA_SECRET_KEY=
 ALPACA_MODE=paper              # NEVER change to live without explicit instruction
 STRATEGY_ENGINE_URL=http://localhost:9100
 EXECUTION_ENGINE_URL=http://localhost:9101
-DUCKDB_PATH=../data/algotrader.duckdb
+DB_PATH=../data/algotrader.sqlite
 NEXT_PUBLIC_EXECUTION_URL=http://localhost:9101
 NEXT_PUBLIC_STRATEGY_URL=http://localhost:9100
 ```
@@ -131,11 +130,11 @@ Position quantities sync with Alpaca every ~5 minutes + on startup
 1. `ALPACA_MODE=paper` is the default. Live mode requires explicit instruction.
 2. Risk rules in `execution-engine/src/risk.rs` are never relaxed without explicit instruction.
 3. API keys always come from environment variables. Never hardcode.
-4. Dashboard never writes to DuckDB directly. All writes go through service APIs.
+4. Dashboard never writes to the database directly. All writes go through service APIs.
 5. Every new strategy must extend `BaseStrategy`. No standalone strategy scripts.
 6. All Rust order submission must pass risk validation BEFORE calling Alpaca API.
 7. `.env` and `data/` are always in `.gitignore`.
-8. DuckDB version must stay aligned between Python and Rust. Never upgrade one without the other.
+8. All database writes go through the execution engine. Strategy engine connects read-only.
 9. Dashboard uses the "Slate" design system — dark slate surfaces, cyan accent (#06b6d4), DM Sans + JetBrains Mono fonts. Run `/styling` before any UI changes.
 
 ---

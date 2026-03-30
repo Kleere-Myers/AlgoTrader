@@ -123,18 +123,26 @@ export default function OverviewPage() {
         <TodaysTrades />
       </section>
 
-      {/* Sectors + Watchlist */}
+      {/* Sectors + Movers | Watchlist */}
       <section className="mb-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {sectors.length > 0 && (
+          <div className="space-y-4">
+            {sectors.length > 0 && (
+              <div>
+                <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-2 uppercase tracking-widest">Sectors</h2>
+                <SectorPerformanceBar sectors={sectors} />
+              </div>
+            )}
             <div>
-              <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-2 uppercase tracking-widest">Sectors</h2>
-              <SectorPerformanceBar sectors={sectors} />
+              <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-3 uppercase tracking-widest">Movers</h2>
+              <MoversList gainers={movers.gainers} losers={movers.losers} />
             </div>
-          )}
+          </div>
           <div>
             <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-2 uppercase tracking-widest">Watchlist</h2>
-            <WatchlistTable symbols={watchlist} loading={watchlistLoading} />
+            <div className="max-h-[480px] overflow-y-auto pr-1">
+              <WatchlistTable symbols={watchlist} loading={watchlistLoading} />
+            </div>
           </div>
         </div>
       </section>
@@ -158,24 +166,16 @@ export default function OverviewPage() {
         </div>
       </section>
 
-      {/* Movers + News */}
+      {/* News */}
       <section className="mb-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div>
-            <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-3 uppercase tracking-widest">Movers</h2>
-            <MoversList gainers={movers.gainers} losers={movers.losers} />
-          </div>
-          <div className="lg:col-span-2">
-            <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-3 uppercase tracking-widest">News</h2>
-            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-              {news.length === 0 && !loading && (
-                <p className="text-text-secondary text-sm">No news available</p>
-              )}
-              {news.map((article, i) => (
-                <NewsCard key={i} article={article} />
-              ))}
-            </div>
-          </div>
+        <h2 className="text-[11px] font-mono font-medium text-text-secondary mb-3 uppercase tracking-widest">News</h2>
+        {news.length === 0 && !loading && (
+          <p className="text-text-secondary text-sm">No news available</p>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto pr-1">
+          {news.map((article, i) => (
+            <NewsCard key={i} article={article} />
+          ))}
         </div>
       </section>
     </div>

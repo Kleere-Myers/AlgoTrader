@@ -55,13 +55,18 @@ A **CompositeScorer** aggregates weighted signals from multiple strategies into 
 
 ## Risk Management
 
-Risk enforcement is implemented in Rust (`execution-engine/src/risk.rs`) and runs before every order submission:
+Risk enforcement is implemented in Rust (`execution-engine/src/risk.rs`) and runs before every order submission. All 12 checks must pass before an order reaches Alpaca:
 
-- Maximum daily loss limits
-- Per-position size constraints
-- Trade frequency throttling
-- Automatic EOD position flattening at 3:45 PM ET (day trades only; swing positions exempt)
-- All orders must pass risk validation before reaching the Alpaca API
+- **Tiered daily loss response** — Tier 1 (2%): reduce limits by 50%. Tier 2 (3%): block new entries. Tier 3 (5%): halt all trading
+- **Daily profit target** — automatically flattens all day positions when unrealized P&L hits a configurable threshold (e.g. 3%), locking in gains
+- **Market regime filter** — suppresses shorts in strong uptrends and longs in strong downtrends (based on SPY intraday change)
+- **Regime-boosted exposure** — raises the net exposure cap (default 40% → 70%) in the direction confirmed by the regime filter
+- **Net exposure cap** — limits total directional exposure as a percentage of equity
+- **Per-position size constraints** and **per-strategy position limits**
+- **Per-position stop-loss and take-profit** for both day and swing trades
+- **Trade frequency throttling** per symbol
+- **Automatic EOD position flattening** at 3:45 PM ET (day trades only; swing positions exempt)
+- **Manual position management** — flatten all day positions or close individual positions via API/dashboard
 
 ## Dashboard
 
@@ -73,7 +78,7 @@ Yahoo Finance-inspired dark theme with real-time data.
 
 **Quote pages** (`/quote/[symbol]`) provide interactive candlestick/line charts, key statistics (14 metrics), company profiles, and symbol-specific news with sentiment.
 
-**Positions** update in real-time via SSE with live prices during extended hours (4 AM - 8 PM ET).
+**Positions** update in real-time via SSE with live prices during extended hours (4 AM - 8 PM ET). Includes a Flatten All button to close all day positions and per-position Close buttons for manual exits.
 
 ## Tech Stack
 
@@ -152,17 +157,17 @@ NEXT_PUBLIC_STRATEGY_URL=http://localhost:9100
 ## Tests
 
 ```bash
-# Strategy engine (160 tests)
+# Strategy engine (164 tests)
 cd strategy-engine && python -m pytest
 
-# Execution engine (34 tests)
+# Execution engine (62 tests)
 cd execution-engine && cargo test
 
 # Dashboard (10 route tests)
 cd dashboard && npm test
 ```
 
-**Total: 204 tests** across all three services.
+**Total: 236 tests** across all three services.
 
 ## Instrument Universe
 

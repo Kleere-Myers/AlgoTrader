@@ -58,6 +58,28 @@ impl PositionTracker {
         }
     }
 
+    /// Count positions opened by a given strategy.
+    pub fn count_by_strategy(&self, strategy_name: &str) -> usize {
+        self.positions.values()
+            .filter(|p| p.strategy_name == strategy_name)
+            .count()
+    }
+
+    /// Calculate net dollar exposure: sum of (long values) - sum of (short values).
+    /// Returns (net_long_value, net_short_value) as absolute dollar amounts.
+    pub fn net_exposure(&self) -> (f64, f64) {
+        let mut long_value = 0.0;
+        let mut short_value = 0.0;
+        for pos in self.positions.values() {
+            let value = pos.qty * pos.current_price;
+            match pos.side {
+                PositionSide::Long => long_value += value,
+                PositionSide::Short => short_value += value,
+            }
+        }
+        (long_value, short_value)
+    }
+
     /// Update or create a position after a fill.
     pub fn update_on_fill(
         &mut self,
@@ -68,6 +90,21 @@ impl PositionTracker {
         trade_type: TradeType,
         stop_loss_price: Option<f64>,
         take_profit_price: Option<f64>,
+    ) -> Option<Position> {
+        self.update_on_fill_with_strategy(symbol, side, qty, fill_price, trade_type, stop_loss_price, take_profit_price, "")
+    }
+
+    /// Update or create a position after a fill, with strategy tracking.
+    pub fn update_on_fill_with_strategy(
+        &mut self,
+        symbol: &str,
+        side: &str,
+        qty: f64,
+        fill_price: f64,
+        trade_type: TradeType,
+        stop_loss_price: Option<f64>,
+        take_profit_price: Option<f64>,
+        strategy_name: &str,
     ) -> Option<Position> {
         let existing = self.positions.get(symbol).cloned();
 
@@ -84,6 +121,7 @@ impl PositionTracker {
                     trade_type,
                     stop_loss_price,
                     take_profit_price,
+                    strategy_name: strategy_name.to_string(),
                 };
                 self.positions.insert(symbol.to_string(), pos.clone());
                 Some(pos)
@@ -122,6 +160,7 @@ impl PositionTracker {
                     trade_type,
                     stop_loss_price,
                     take_profit_price,
+                    strategy_name: strategy_name.to_string(),
                 };
                 self.positions.insert(symbol.to_string(), pos.clone());
                 Some(pos)
@@ -228,12 +267,21 @@ impl PositionTracker {
                     trade_type: TradeType::Day, // Default; can't know from Alpaca
                     stop_loss_price: None,
                     take_profit_price: None,
+                    strategy_name: String::new(),
                 });
                 changed.push(sym.clone());
             }
         }
 
         changed
+    }
+
+    /// Total unrealized P&L across all day-trading positions.
+    pub fn day_unrealized_pnl(&self) -> f64 {
+        self.positions.values()
+            .filter(|p| p.trade_type == TradeType::Day)
+            .map(|p| p.unrealized_pnl)
+            .sum()
     }
 
     /// Calculate approximate value of a position given a price.

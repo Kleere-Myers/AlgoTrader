@@ -655,9 +655,12 @@ pub async fn swing_stop_check_loop(state: Arc<AppState>) {
 
 /// Background task: refreshes position prices from Alpaca latest trades every 15 seconds.
 /// Every 5 minutes, also syncs position quantities with Alpaca's actual holdings.
+/// Also tracks SPY intraday change for the market regime filter and checks day trade
+/// positions against their stop-loss / take-profit levels.
 /// Runs during extended hours (4 AM – 8 PM ET) to capture pre-market and after-hours moves.
 pub async fn quote_refresh_loop(state: Arc<AppState>) {
     let mut tick_count: u32 = 0;
+    let mut last_spy_open_date: Option<NaiveDate> = None;
 
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(15)).await;
@@ -677,6 +680,22 @@ pub async fn quote_refresh_loop(state: Arc<AppState>) {
         let extended_close = NaiveTime::from_hms_opt(20, 0, 0).unwrap();
         if current_time < extended_open || current_time > extended_close {
             continue;
+        }
+
+        // --- SPY open price: fetch once per trading day ---
+        if last_spy_open_date != Some(today) {
+            match state.alpaca.get_daily_bars("SPY", 1).await {
+                Ok(bars) if !bars.is_empty() => {
+                    let open = bars.last().unwrap().open;
+                    *state.spy_day_open.lock().await = Some(open);
+                    last_spy_open_date = Some(today);
+                    // Reset profit target flag for the new trading day
+                    *state.profit_target_hit.lock().await = false;
+                    info!(spy_open = open, "SPY daily open price set, profit target reset");
+                }
+                Ok(_) => warn!("No daily bars returned for SPY"),
+                Err(e) => warn!("Failed to fetch SPY daily bars: {e}"),
+            }
         }
 
         // Every 20 ticks (~5 min), do a full position sync with Alpaca
@@ -712,18 +731,19 @@ pub async fn quote_refresh_loop(state: Arc<AppState>) {
             continue; // Skip the price-only update on sync ticks
         }
 
-        // Normal tick: just update prices
+        // Build symbols list: positions + always include SPY for regime tracking
         let position_symbols: Vec<String> = {
             let tracker = state.positions.lock().await;
             tracker.all().iter().map(|p| p.symbol.clone()).collect()
         };
 
-        if position_symbols.is_empty() {
-            continue;
+        let mut fetch_symbols = position_symbols.clone();
+        if !fetch_symbols.iter().any(|s| s == "SPY") {
+            fetch_symbols.push("SPY".to_string());
         }
 
         // Fetch latest trade prices in a single API call
-        let prices = match state.alpaca.get_latest_trades(&position_symbols).await {
+        let prices = match state.alpaca.get_latest_trades(&fetch_symbols).await {
             Ok(p) => p,
             Err(e) => {
                 warn!("Quote refresh failed: {e}");
@@ -731,16 +751,29 @@ pub async fn quote_refresh_loop(state: Arc<AppState>) {
             }
         };
 
-        // Update each position
+        // --- Update SPY intraday change ---
+        if let Some(spy_price) = prices.get("SPY") {
+            let spy_open = state.spy_day_open.lock().await;
+            if let Some(open) = *spy_open {
+                if open > 0.0 {
+                    let change_pct = (spy_price - open) / open;
+                    *state.spy_day_change_pct.lock().await = change_pct;
+                }
+            }
+        }
+
+        if position_symbols.is_empty() {
+            continue;
+        }
+
+        // Update each position's price
         let mut tracker = state.positions.lock().await;
         for (symbol, price) in &prices {
             if let Some(updated) = tracker.update_price(symbol, *price) {
-                // Persist to DuckDB
                 if let Ok(con) = db::connect() {
                     let _ = db::upsert_position(&con, &updated);
                 }
 
-                // Broadcast SSE so dashboard updates in real time
                 state.broadcaster.send(SseEvent {
                     event_type: SseEventType::PositionUpdate,
                     timestamp: chrono::Utc::now().to_rfc3339(),
@@ -750,6 +783,234 @@ pub async fn quote_refresh_loop(state: Arc<AppState>) {
                         "unrealized_pnl": updated.unrealized_pnl,
                     }),
                 });
+            }
+        }
+
+        // --- Portfolio-level daily profit target check ---
+        // If unrealized day P&L exceeds the configured target, flatten all day positions.
+        if !*state.profit_target_hit.lock().await {
+            let profit_target_pct = {
+                let engine = state.risk_engine.lock().await;
+                engine.config.daily_profit_target_pct
+            };
+            if profit_target_pct > 0.0 {
+                let equity = *state.account_equity.lock().await;
+                let day_pnl = tracker.day_unrealized_pnl();
+                let target_dollars = equity * profit_target_pct;
+                if day_pnl >= target_dollars {
+                    info!(
+                        day_pnl,
+                        target_dollars,
+                        target_pct = profit_target_pct * 100.0,
+                        "Daily profit target hit — flattening all day positions"
+                    );
+
+                    // Set the flag to block new entries for the rest of the day
+                    *state.profit_target_hit.lock().await = true;
+
+                    let day_positions = tracker.day_positions();
+                    drop(tracker);
+
+                    // Broadcast event so dashboard knows
+                    state.broadcaster.send(SseEvent {
+                        event_type: SseEventType::TradingHalted,
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                        payload: serde_json::json!({
+                            "reason": "DAILY_PROFIT_TARGET",
+                            "day_pnl": day_pnl,
+                            "target_dollars": target_dollars,
+                        }),
+                    });
+
+                    for pos in &day_positions {
+                        let close_side = match pos.side {
+                            PositionSide::Long => "sell",
+                            PositionSide::Short => "buy",
+                        };
+
+                        info!(
+                            symbol = %pos.symbol,
+                            qty = pos.qty,
+                            side = close_side,
+                            reason = "DAILY_PROFIT_TARGET",
+                            "Flattening position"
+                        );
+
+                        match state.alpaca.submit_market_order(&pos.symbol, pos.qty, close_side).await {
+                            Ok(alpaca_order) => {
+                                let now = chrono::Utc::now().to_rfc3339();
+                                let order = Order {
+                                    order_id: uuid::Uuid::new_v4().to_string(),
+                                    alpaca_id: Some(alpaca_order.id.clone()),
+                                    symbol: pos.symbol.clone(),
+                                    side: close_side.to_string(),
+                                    qty: pos.qty,
+                                    filled_price: alpaca_order.filled_avg_price.as_ref().and_then(|p| p.parse::<f64>().ok()),
+                                    status: alpaca_order.status.clone(),
+                                    strategy_name: "DAILY_PROFIT_TARGET".to_string(),
+                                    created_at: now,
+                                    filled_at: alpaca_order.filled_at.clone(),
+                                    trade_type: crate::models::TradeType::Day,
+                                };
+
+                                if let Ok(con) = db::connect() {
+                                    if let Err(e) = db::insert_order(&con, &order) {
+                                        error!("Failed to insert profit target order: {e}");
+                                    }
+                                }
+
+                                state.risk_engine.lock().await.record_order(&pos.symbol);
+
+                                let fill_price = crate::poll_for_fill(
+                                    &state, &alpaca_order.id, &order.order_id, close_side, pos.qty, &pos.symbol,
+                                ).await;
+
+                                {
+                                    let mut tracker = state.positions.lock().await;
+                                    let updated = tracker.update_on_fill(
+                                        &pos.symbol, close_side, pos.qty,
+                                        fill_price.unwrap_or(0.0),
+                                        crate::models::TradeType::Day, None, None,
+                                    );
+                                    if let Ok(con) = db::connect() {
+                                        match updated {
+                                            Some(ref p) => { let _ = db::upsert_position(&con, p); }
+                                            None => { let _ = db::delete_position(&con, &pos.symbol); }
+                                        }
+                                    }
+                                }
+
+                                state.broadcaster.send(SseEvent {
+                                    event_type: SseEventType::PositionUpdate,
+                                    timestamp: chrono::Utc::now().to_rfc3339(),
+                                    payload: serde_json::json!({
+                                        "symbol": pos.symbol,
+                                        "action": "DAILY_PROFIT_TARGET",
+                                        "qty_sold": pos.qty,
+                                        "fill_price": fill_price,
+                                    }),
+                                });
+
+                                info!(
+                                    symbol = %pos.symbol,
+                                    fill_price,
+                                    reason = "DAILY_PROFIT_TARGET",
+                                    "Position flattened"
+                                );
+                            }
+                            Err(e) => {
+                                error!(symbol = %pos.symbol, "Profit target flatten failed: {e}");
+                            }
+                        }
+                    }
+
+                    info!(count = day_positions.len(), "Daily profit target flatten complete");
+                    continue;
+                }
+            }
+        }
+
+        // --- Day trade stop-loss / take-profit check ---
+        // Skip if within 1 minute of EOD flatten to avoid race
+        let flatten_time = NaiveTime::from_hms_opt(15, 44, 0).unwrap();
+        if !is_market_hours(current_time) || current_time >= flatten_time {
+            continue;
+        }
+
+        let day_positions = tracker.day_positions();
+        // Collect exits needed, then release the lock before submitting orders
+        let mut exits: Vec<(String, f64, PositionSide, String)> = Vec::new();
+        for pos in &day_positions {
+            let (stop, take) = match (pos.stop_loss_price, pos.take_profit_price) {
+                (Some(sl), Some(tp)) => (sl, tp),
+                _ => continue,
+            };
+
+            let (hit_stop, hit_take) = match pos.side {
+                PositionSide::Long => (pos.current_price <= stop, pos.current_price >= take),
+                PositionSide::Short => (pos.current_price >= stop, pos.current_price <= take),
+            };
+
+            if hit_stop {
+                exits.push((pos.symbol.clone(), pos.qty, pos.side.clone(), "DAY_STOP_LOSS".to_string()));
+            } else if hit_take {
+                exits.push((pos.symbol.clone(), pos.qty, pos.side.clone(), "DAY_TAKE_PROFIT".to_string()));
+            }
+        }
+        drop(tracker);
+
+        // Submit exit orders
+        for (symbol, qty, side, reason) in exits {
+            let close_side = match side {
+                PositionSide::Long => "sell",
+                PositionSide::Short => "buy",
+            };
+
+            info!(
+                symbol = %symbol,
+                qty,
+                side = close_side,
+                reason = %reason,
+                "Day trade exit triggered"
+            );
+
+            match state.alpaca.submit_market_order(&symbol, qty, close_side).await {
+                Ok(alpaca_order) => {
+                    let now = chrono::Utc::now().to_rfc3339();
+                    let order = crate::models::Order {
+                        order_id: uuid::Uuid::new_v4().to_string(),
+                        alpaca_id: Some(alpaca_order.id.clone()),
+                        symbol: symbol.clone(),
+                        side: close_side.to_string(),
+                        qty,
+                        filled_price: alpaca_order.filled_avg_price.as_ref().and_then(|p| p.parse::<f64>().ok()),
+                        status: alpaca_order.status.clone(),
+                        strategy_name: reason.clone(),
+                        created_at: now,
+                        filled_at: alpaca_order.filled_at.clone(),
+                        trade_type: crate::models::TradeType::Day,
+                    };
+
+                    if let Ok(con) = db::connect() {
+                        if let Err(e) = db::insert_order(&con, &order) {
+                            error!("Failed to insert day exit order: {e}");
+                        }
+                    }
+
+                    state.risk_engine.lock().await.record_order(&symbol);
+
+                    let fill_price = crate::poll_for_fill(
+                        &state, &alpaca_order.id, &order.order_id, close_side, qty, &symbol,
+                    ).await;
+
+                    {
+                        let mut tracker = state.positions.lock().await;
+                        let updated = tracker.update_on_fill(&symbol, close_side, qty, fill_price.unwrap_or(0.0), crate::models::TradeType::Day, None, None);
+                        if let Ok(con) = db::connect() {
+                            match updated {
+                                Some(ref p) => { let _ = db::upsert_position(&con, p); }
+                                None => { let _ = db::delete_position(&con, &symbol); }
+                            }
+                        }
+                    }
+
+                    state.broadcaster.send(SseEvent {
+                        event_type: SseEventType::PositionUpdate,
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                        payload: serde_json::json!({
+                            "symbol": symbol,
+                            "action": reason,
+                            "trade_type": "day",
+                            "qty_closed": qty,
+                            "fill_price": fill_price,
+                        }),
+                    });
+
+                    info!(symbol = %symbol, fill_price, reason = %reason, "Day trade exit completed");
+                }
+                Err(e) => {
+                    error!(symbol = %symbol, "Day trade exit order failed: {e}");
+                }
             }
         }
     }

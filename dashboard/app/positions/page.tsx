@@ -10,6 +10,9 @@ import type { Position } from "@/types";
 export default function PositionsPage() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [flattenConfirm, setFlattenConfirm] = useState(false);
+  const [flattenLoading, setFlattenLoading] = useState(false);
+  const [closingSymbol, setClosingSymbol] = useState<string | null>(null);
   const { events } = useSseEvents();
 
   const loadPositions = async () => {
@@ -40,6 +43,35 @@ export default function PositionsPage() {
     }
   }, [events]);
 
+  const handleFlatten = async () => {
+    if (!flattenConfirm) {
+      setFlattenConfirm(true);
+      return;
+    }
+    setFlattenLoading(true);
+    try {
+      await executionApi.flattenDayPositions();
+      await loadPositions();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setFlattenLoading(false);
+      setFlattenConfirm(false);
+    }
+  };
+
+  const handleClose = async (symbol: string) => {
+    setClosingSymbol(symbol);
+    try {
+      await executionApi.closePosition(symbol);
+      await loadPositions();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setClosingSymbol(null);
+    }
+  };
+
   const totalPnl = positions.reduce((sum, p) => sum + p.unrealized_pnl, 0);
   const totalValue = positions.reduce((sum, p) => sum + p.current_price * p.qty, 0);
   const dayPositions = positions.filter((p) => p.trade_type === "day" || !p.trade_type);
@@ -49,20 +81,51 @@ export default function PositionsPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-text-primary">Positions</h2>
-        {positions.length > 0 && (
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-text-secondary">
-              Value: <span className="text-text-primary font-medium font-mono tabular-nums">${totalValue.toFixed(2)}</span>
-            </span>
-            <span
-              className={`text-lg font-semibold ${
-                totalPnl >= 0 ? "text-gain" : "text-loss"
-              }`}
-            >
-              P&L: {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-4">
+          {positions.length > 0 && (
+            <>
+              <span className="text-sm text-text-secondary">
+                Value: <span className="text-text-primary font-medium font-mono tabular-nums">${totalValue.toFixed(2)}</span>
+              </span>
+              <span
+                className={`text-lg font-semibold ${
+                  totalPnl >= 0 ? "text-gain" : "text-loss"
+                }`}
+              >
+                P&L: {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
+              </span>
+            </>
+          )}
+          {dayPositions.length > 0 && (
+            <>
+              {flattenConfirm ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-loss">Close {dayPositions.length} day position{dayPositions.length !== 1 ? "s" : ""}?</span>
+                  <button
+                    onClick={handleFlatten}
+                    disabled={flattenLoading}
+                    className="bg-loss text-white text-xs font-medium px-3 py-1.5 rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {flattenLoading ? "Closing..." : "Confirm"}
+                  </button>
+                  <button
+                    onClick={() => setFlattenConfirm(false)}
+                    className="text-text-secondary text-xs font-medium px-3 py-1.5 rounded border border-surface-600 hover:bg-surface-700 hover:text-text-primary transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleFlatten}
+                  className="text-text-secondary text-xs font-medium px-3 py-1.5 rounded border border-surface-600 hover:bg-loss/10 hover:text-loss hover:border-loss/30 transition-colors"
+                >
+                  Flatten All Day
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -109,6 +172,7 @@ export default function PositionsPage() {
               <th className="px-4 py-3">P&L % <Tip text="Percentage gain or loss from entry price." inline /></th>
               <th className="px-4 py-3">Stop Loss <Tip text="Auto-sell trigger if price drops to this level." inline /></th>
               <th className="px-4 py-3">Take Profit <Tip text="Auto-sell trigger if price rises to this level." inline /></th>
+              <th className="px-4 py-3 w-16"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-surface-600">
@@ -116,7 +180,7 @@ export default function PositionsPage() {
               <tr>
                 <td
                   className="px-4 py-8 text-center text-text-secondary"
-                  colSpan={11}
+                  colSpan={12}
                 >
                   No open positions
                 </td>
@@ -134,6 +198,7 @@ export default function PositionsPage() {
                 const isPositive = p.unrealized_pnl >= 0;
                 const pnlColor = isPositive ? "text-gain" : "text-loss";
                 const tradeType = p.trade_type || "day";
+                const isClosing = closingSymbol === p.symbol;
 
                 // Distance to stop/take as percentage from current
                 const stopDist =
@@ -220,6 +285,16 @@ export default function PositionsPage() {
                       ) : (
                         <span className="text-text-secondary">—</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => handleClose(p.symbol)}
+                        disabled={isClosing || closingSymbol !== null}
+                        className="text-text-secondary text-xs font-medium px-2 py-1 rounded border border-surface-600 hover:bg-loss/10 hover:text-loss hover:border-loss/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={`Close ${p.symbol} position`}
+                      >
+                        {isClosing ? "..." : "Close"}
+                      </button>
                     </td>
                   </tr>
                 );

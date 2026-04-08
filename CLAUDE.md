@@ -144,10 +144,10 @@ Update this line as you progress:
 **CURRENT PHASE: Phase 5 — Live Trading Transition**
 
 ## Test Baseline (Phase 5 current)
-- Rust:   34/34 (includes 8 swing risk tests)
-- Python: 160/160 (includes swing trading: 9 composite + 10 multi-timeframe + 11 relative strength)
+- Rust:   62/62 (includes 8 swing risk + 7 regime filter + 5 regime-boosted exposure + 2 day stop/take + 5 exposure/strategy limit + 6 tiered loss + 4 profit target tests)
+- Python: 164/164 (includes swing trading: 13 composite + 10 multi-timeframe + 11 relative strength)
 - Next.js: 10/10 routes (includes /watchlist)
-- Total:  204 tests
+- Total:  236 tests
 
 ## Agent Context Files
 - `AGENT_STRATEGY.md` — Python strategy engine agent prompt
@@ -242,6 +242,8 @@ Yahoo Finance-style quote detail page, accessed via symbol links (not in navbar)
 - Summary badges showing position count by type
 - Symbols link to `/quote/[symbol]`
 - Prices update via SSE POSITION_UPDATE events (every ~15s during extended hours)
+- **Flatten All Day** button — closes all day positions with two-click confirmation
+- **Per-position Close** button — closes individual positions (day or swing)
 
 ### Components (16 total)
 Navbar, MarketIndexCard, SparklineChart, SectorPerformanceBar, WatchlistTable,

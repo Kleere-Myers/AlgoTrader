@@ -77,7 +77,7 @@ NEXT_PUBLIC_STRATEGY_URL=http://localhost:9100
 |---|---|---|
 | `/` | Overview | Market indices, sectors, P&L history, movers, news feed |
 | `/watchlist` | Watchlist | GET /company/{symbol}, GET /news/{symbol} |
-| `/positions` | Positions | GET /positions (execution), SSE for live updates |
+| `/positions` | Positions | GET /positions, POST /flatten, POST /positions/:symbol/close, SSE |
 | `/orders` | Orders | GET /orders (execution) |
 | `/strategies` | Strategies | GET /strategies (strategy), POST /backtest triggers |
 | `/backtest` | Backtest | GET /backtest/{strategy}/{symbol} (strategy) |
@@ -152,6 +152,8 @@ All API calls go through typed wrappers. Never call fetch directly in pages.
 **executionApi** (port 9101):
 - `getAccount()`, `getPositions()`, `getOrders()`
 - `haltTrading()`, `resumeTrading()`
+- `flattenDayPositions()` — POST /flatten, close all day positions immediately
+- `closePosition(symbol)` — POST /positions/:symbol/close, close a single position
 - `getRiskConfig()`, `patchRiskConfig(patch)`
 - `sseUrl` for SSE stream
 

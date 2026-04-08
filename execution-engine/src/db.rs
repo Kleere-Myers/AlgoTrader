@@ -208,6 +208,7 @@ pub fn load_positions(con: &Connection) -> Result<Vec<Position>, rusqlite::Error
             trade_type,
             stop_loss_price: row.get(6)?,
             take_profit_price: row.get(7)?,
+            strategy_name: String::new(),
         })
     })?;
     let mut positions = Vec::new();

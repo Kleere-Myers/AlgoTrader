@@ -9,32 +9,45 @@ interface FieldMeta {
   key: keyof RiskConfig;
   label: string;
   description: string;
-  format: "pct" | "int" | "secs" | "time";
+  format: "pct" | "int" | "secs" | "time" | "bool";
   readOnly?: boolean;
 }
 
 const FIELDS: FieldMeta[] = [
   { key: "max_daily_loss_pct", label: "Max Daily Loss", description: "Halt all trading when daily loss exceeds this % of equity", format: "pct" },
+  { key: "daily_loss_tier1_pct", label: "Loss Tier 1", description: "Reduce position sizes and max positions by 50% at this loss %", format: "pct" },
+  { key: "daily_loss_tier2_pct", label: "Loss Tier 2", description: "Block all new entries at this loss %", format: "pct" },
+  { key: "daily_profit_target_pct", label: "Daily Profit Target", description: "Flatten all day positions and halt entries when unrealized P&L hits this % (0 = disabled)", format: "pct" },
   { key: "max_position_size_pct", label: "Max Position Size", description: "Reject signals that would exceed this % of equity per position", format: "pct" },
   { key: "max_open_positions", label: "Max Open Positions", description: "Reject signals when this many positions are already open (1\u201310)", format: "int" },
+  { key: "max_positions_per_strategy", label: "Max Per Strategy", description: "Max positions any single strategy can hold", format: "int" },
   { key: "min_signal_confidence", label: "Min Signal Confidence", description: "Reject signals below this confidence threshold (0.0\u20131.0)", format: "pct" },
   { key: "order_throttle_secs", label: "Order Throttle", description: "Minimum seconds between orders for the same symbol", format: "secs" },
-  { key: "eod_flatten_time_et", label: "EOD Flatten Time (ET)", description: "All positions market-sold at this time. Not editable in v1.", format: "time", readOnly: true },
+  { key: "max_net_exposure_pct", label: "Max Net Exposure", description: "Cap on directional exposure as % of equity (long or short)", format: "pct" },
+  { key: "regime_boosted_exposure_pct", label: "Regime-Boosted Exposure", description: "Raised exposure cap when regime filter confirms direction", format: "pct" },
+  { key: "regime_filter_enabled", label: "Regime Filter", description: "Suppress shorts in uptrends, longs in downtrends (based on SPY)", format: "bool" },
+  { key: "regime_filter_threshold_pct", label: "Regime Threshold", description: "SPY daily change % that triggers the regime filter", format: "pct" },
+  { key: "day_stop_loss_pct", label: "Day Stop Loss", description: "Per-position stop-loss % for day trades", format: "pct" },
+  { key: "day_take_profit_pct", label: "Day Take Profit", description: "Per-position take-profit % for day trades", format: "pct" },
+  { key: "eod_flatten_time_et", label: "EOD Flatten Time (ET)", description: "All day positions market-sold at this time. Not editable in v1.", format: "time", readOnly: true },
 ];
 
-function formatDisplay(value: number | string, format: string): string {
+function formatDisplay(value: number | string | boolean, format: string): string {
+  if (format === "bool") return value ? "Enabled" : "Disabled";
   if (format === "pct") return `${((value as number) * 100).toFixed(1)}%`;
   if (format === "secs") return `${value}s`;
   if (format === "time") return value as string;
   return String(value);
 }
 
-function toInputValue(value: number | string, format: string): string {
+function toInputValue(value: number | string | boolean, format: string): string {
+  if (format === "bool") return value ? "true" : "false";
   if (format === "pct") return ((value as number) * 100).toString();
   return String(value);
 }
 
-function fromInputValue(input: string, format: string): number {
+function fromInputValue(input: string, format: string): number | boolean {
+  if (format === "bool") return input === "true";
   if (format === "pct") return parseFloat(input) / 100;
   if (format === "int") return parseInt(input, 10);
   return parseFloat(input);
@@ -91,6 +104,7 @@ export default function RiskPage() {
     for (const key of changedKeys) {
       const meta = FIELDS.find((f) => f.key === key);
       if (!meta) continue;
+      if (meta.format === "bool") continue;
       const raw = edited[key];
       const num = parseFloat(raw);
 
@@ -192,6 +206,20 @@ export default function RiskPage() {
                         EOD flatten time is not configurable in v1
                       </div>
                     </div>
+                  ) : field.format === "bool" ? (
+                    <button
+                      onClick={() => {
+                        const current = edited[field.key] ?? toInputValue(currentValue, field.format);
+                        handleInputChange(field.key, current === "true" ? "false" : "true");
+                      }}
+                      className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors ${
+                        (edited[field.key] ?? toInputValue(currentValue, field.format)) === "true"
+                          ? "bg-gain/15 text-gain border border-gain/30"
+                          : "bg-loss/15 text-loss border border-loss/30"
+                      }`}
+                    >
+                      {(edited[field.key] ?? toInputValue(currentValue, field.format)) === "true" ? "Enabled" : "Disabled"}
+                    </button>
                   ) : (
                     <div className="flex items-center gap-1">
                       <input

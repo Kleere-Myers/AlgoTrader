@@ -102,6 +102,16 @@ export interface RiskConfig {
   min_signal_confidence: number;
   order_throttle_secs: number;
   eod_flatten_time_et: string;
+  day_stop_loss_pct: number;
+  day_take_profit_pct: number;
+  regime_filter_enabled: boolean;
+  regime_filter_threshold_pct: number;
+  max_net_exposure_pct: number;
+  max_positions_per_strategy: number;
+  daily_loss_tier1_pct: number;
+  daily_loss_tier2_pct: number;
+  daily_profit_target_pct: number;
+  regime_boosted_exposure_pct: number;
 }
 
 export interface CompanyInfo {

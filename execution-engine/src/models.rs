@@ -89,7 +89,7 @@ impl Default for PositionSide {
     }
 }
 
-/// Position tracked in memory and DuckDB.
+/// Position tracked in memory and SQLite.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Position {
     pub symbol: String,
@@ -103,6 +103,9 @@ pub struct Position {
     pub trade_type: TradeType,
     pub stop_loss_price: Option<f64>,
     pub take_profit_price: Option<f64>,
+    /// Strategy that opened this position (in-memory only, not persisted to DB).
+    #[serde(default)]
+    pub strategy_name: String,
 }
 
 /// Order record for DuckDB.
@@ -168,6 +171,16 @@ pub struct RiskConfigUpdate {
     pub min_signal_confidence: Option<f64>,
     pub order_throttle_secs: Option<u64>,
     pub eod_flatten_time_et: Option<String>,
+    pub day_stop_loss_pct: Option<f64>,
+    pub day_take_profit_pct: Option<f64>,
+    pub regime_filter_enabled: Option<bool>,
+    pub regime_filter_threshold_pct: Option<f64>,
+    pub max_net_exposure_pct: Option<f64>,
+    pub max_positions_per_strategy: Option<usize>,
+    pub daily_loss_tier1_pct: Option<f64>,
+    pub daily_loss_tier2_pct: Option<f64>,
+    pub daily_profit_target_pct: Option<f64>,
+    pub regime_boosted_exposure_pct: Option<f64>,
 }
 
 /// Response for GET /risk/config and PATCH /risk/config.
@@ -179,6 +192,16 @@ pub struct RiskConfigResponse {
     pub min_signal_confidence: f64,
     pub order_throttle_secs: u64,
     pub eod_flatten_time_et: String,
+    pub day_stop_loss_pct: f64,
+    pub day_take_profit_pct: f64,
+    pub regime_filter_enabled: bool,
+    pub regime_filter_threshold_pct: f64,
+    pub max_net_exposure_pct: f64,
+    pub max_positions_per_strategy: usize,
+    pub daily_loss_tier1_pct: f64,
+    pub daily_loss_tier2_pct: f64,
+    pub daily_profit_target_pct: f64,
+    pub regime_boosted_exposure_pct: f64,
 }
 
 /// SSE event envelope.

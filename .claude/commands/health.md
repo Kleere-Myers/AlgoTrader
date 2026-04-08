@@ -48,6 +48,8 @@ Positions:
 
 Risk Config:
   Daily loss: X% | Pos size: X% | Max positions: X | Min confidence: X | Throttle: Xs | EOD: HH:MM
+  Day stop: X% | Day TP: X% | Regime filter: on/off (X%) | Max exposure: X% (X% regime-boosted)
+  Loss tiers: T1=X%, T2=X% | Profit target: X% | Per-strategy: X
 
 Strategies:
   X/Y enabled

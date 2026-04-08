@@ -39,6 +39,15 @@ export const executionApi = {
     }
     return { data: body };
   },
+  flattenDayPositions: () =>
+    fetchJson<{ status: string; closed: number; failed: string[] }>(`${EXECUTION_URL}/flatten`, {
+      method: "POST",
+    }),
+  closePosition: (symbol: string) =>
+    fetchJson<{ status: string; symbol: string; fill_price: number | null }>(
+      `${EXECUTION_URL}/positions/${symbol}/close`,
+      { method: "POST" },
+    ),
   sseUrl: `${EXECUTION_URL}/stream/events`,
 };
 

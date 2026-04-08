@@ -59,6 +59,6 @@ After the execution engine starts, re-apply the user's preferred risk settings b
 ```
 curl -s -X PATCH http://localhost:9101/risk/config \
   -H "Content-Type: application/json" \
-  -d '{"max_daily_loss_pct": 0.05, "max_position_size_pct": 0.20, "max_open_positions": 8, "min_signal_confidence": 0.50, "order_throttle_secs": 120}'
+  -d '{"max_daily_loss_pct": 0.05, "max_position_size_pct": 0.20, "max_open_positions": 8, "min_signal_confidence": 0.50, "order_throttle_secs": 120, "daily_profit_target_pct": 0.03, "regime_boosted_exposure_pct": 0.70}'
 ```
 Report the applied risk config in the status output.

@@ -115,6 +115,7 @@ pub struct SseEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum SseEventType {
     PositionUpdate,
     OrderFill,
@@ -122,6 +123,7 @@ pub enum SseEventType {
     TradingResumed,
     DailyPnl,
     RiskBreach,
+    RiskConfigUpdated,
 }
 ```
 
@@ -135,12 +137,21 @@ It is always safe to make them more restrictive.
 
 ```rust
 pub struct RiskConfig {
-    pub max_daily_loss_pct: f64,        // Default: 0.02 (2% of account equity)
-    pub max_position_size_pct: f64,     // Default: 0.10 (10% of equity per symbol)
-    pub max_open_positions: usize,      // Default: 4
-    pub min_signal_confidence: f64,     // Default: 0.60
-    pub order_throttle_secs: u64,       // Default: 300 (5 min per symbol)
-    pub eod_flatten_time_et: &'static str, // Default: "15:45"
+    pub max_daily_loss_pct: f64,            // Default: 0.02 (2% of account equity)
+    pub max_position_size_pct: f64,         // Default: 0.10 (10% of equity per symbol)
+    pub max_open_positions: usize,          // Default: 4
+    pub min_signal_confidence: f64,         // Default: 0.60
+    pub order_throttle_secs: u64,           // Default: 300 (5 min per symbol)
+    pub day_stop_loss_pct: f64,             // Default: 0.01 (1% per-position stop)
+    pub day_take_profit_pct: f64,           // Default: 0.03 (3% per-position take)
+    pub regime_filter_enabled: bool,        // Default: true
+    pub regime_filter_threshold_pct: f64,   // Default: 0.01 (1% SPY change)
+    pub max_net_exposure_pct: f64,          // Default: 0.40 (40% directional cap)
+    pub max_positions_per_strategy: usize,  // Default: 2
+    pub daily_loss_tier1_pct: f64,          // Default: 0.02 — reduce limits by 50%
+    pub daily_loss_tier2_pct: f64,          // Default: 0.03 — block all new entries
+    pub daily_profit_target_pct: f64,       // Default: 0.0 (disabled) — flatten day positions when hit
+    pub regime_boosted_exposure_pct: f64,   // Default: 0.70 — raised cap when regime confirms direction
 }
 
 pub enum RiskDecision {
@@ -152,13 +163,31 @@ pub enum RiskDecision {
 
 ### Risk Checks (run in this order)
 1. Is trading currently halted? → Reject immediately
-2. Is daily loss >= max_daily_loss_pct of equity? → HaltAll
-3. Is signal confidence >= min_signal_confidence? → Reject if not
-4. Is direction HOLD? → Return Approved (no order needed)
-5. Does open position count >= max_open_positions (for BUY)? → Reject
-6. Would new position size exceed max_position_size_pct of equity? → Reject
-7. Was an order submitted for this symbol within throttle window? → Reject
-8. All checks passed → Approved
+2. Tiered daily loss response:
+   - Tier 3: loss >= max_daily_loss_pct → HaltAll
+   - Tier 2: loss >= daily_loss_tier2_pct → Reject all new entries
+   - Tier 1: loss >= daily_loss_tier1_pct → Reduce max positions and position size by 50%
+3. Has daily profit target been hit? → Reject BUY/SELL (HOLD still allowed)
+4. Is signal confidence >= min_signal_confidence? → Reject if not
+5. Market regime filter (if enabled):
+   - SPY up > threshold → suppress shorts
+   - SPY down > threshold → suppress longs
+6. Net exposure cap — prevent excessive directional exposure
+   - When regime filter confirms direction, cap boosts to regime_boosted_exposure_pct
+     (e.g. longs allowed up to 70% in strong uptrend instead of base 40%)
+   - Opposite direction stays at max_net_exposure_pct
+7. Per-strategy position limit (max_positions_per_strategy) → Reject
+8. Is direction HOLD? → Return Approved (no order needed)
+9. Does open position count >= max_open_positions? → Reject (uses effective limit if tier 1 active)
+10. Would new position size exceed max_position_size_pct of equity? → Reject
+11. Was an order submitted for this symbol within throttle window? → Reject
+12. All checks passed → Approved
+
+### Daily Profit Target
+When `daily_profit_target_pct > 0` and total unrealized day P&L exceeds the target
+(checked every 15s in quote_refresh_loop), all day positions are flattened immediately
+and the `profit_target_hit` flag is set. This blocks new BUY/SELL entries for the rest
+of the day. The flag resets at the start of each new trading day.
 
 Log every rejection with reason to tracing and write to SQLite `signals` table.
 
@@ -215,8 +244,17 @@ On each bar received:
 | GET | /account | Equity, buying power, today's realized P&L |
 | POST | /trading/halt | Set trading_halted = true, broadcast SSE TradingHalted |
 | POST | /trading/resume | Set trading_halted = false, broadcast SSE TradingResumed |
+| POST | /flatten | Close all day-trading positions immediately (MANUAL_FLATTEN) |
+| POST | /positions/:symbol/close | Close a single position by symbol (MANUAL_CLOSE) |
+| GET | /risk/config | Current risk configuration |
+| PATCH | /risk/config | Update risk parameters (partial update, validates ranges) |
+| GET | /risk/swing-config | Current swing risk configuration |
+| PATCH | /risk/swing-config | Update swing risk parameters |
 | GET | /positions/day | Day-trade positions only |
 | GET | /positions/swing | Swing positions only |
+| POST | /db/signals | Proxy: strategy engine writes signals through execution engine |
+| POST | /db/watched-symbols | Proxy: add watched symbol |
+| DELETE | /db/watched-symbols/:symbol | Proxy: remove watched symbol |
 | GET | /stream/events | SSE endpoint — keep-alive, push SseEvents to dashboard |
 | GET | /health | Returns `{"status": "ok", "mode": "paper|live"}` |
 
@@ -256,6 +294,13 @@ from Alpaca (`/v2/stocks/trades/latest`) and updates position `current_price`
 and `unrealized_pnl`. Broadcasts SSE `POSITION_UPDATE` so the dashboard updates.
 Every ~5 minutes, does a full position sync with Alpaca's `/v2/positions` to
 correct any qty drift (manual trades, partial fills, etc.).
+
+Also checks:
+- **Daily profit target:** If total unrealized day P&L >= `daily_profit_target_pct`
+  × equity, flattens all day positions and sets `profit_target_hit` flag.
+- **Day trade stop/take:** Individual position stop-loss and take-profit levels.
+- **SPY open price:** Fetched once per trading day to track regime filter.
+  Resets `profit_target_hit` flag at start of each new trading day.
 
 ### Swing Signal Scanner (`daily_swing_signal_loop`)
 Fires once at 4:05 PM ET. Fetches daily bars, generates composite swing signals.

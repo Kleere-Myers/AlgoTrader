@@ -36,6 +36,12 @@ pub struct AppState {
     pub account_equity: Mutex<f64>,
     pub strategy_engine_url: String,
     pub symbols: Mutex<Vec<String>>,
+    /// SPY's opening price for the current trading day (set once at market open).
+    pub spy_day_open: Mutex<Option<f64>>,
+    /// SPY's intraday percentage change from open (updated every 15s by quote_refresh_loop).
+    pub spy_day_change_pct: Mutex<f64>,
+    /// True when the daily profit target has been hit — blocks new entries for the rest of the day.
+    pub profit_target_hit: Mutex<bool>,
 }
 
 async fn load_symbols(strategy_engine_url: &str) -> Vec<String> {
@@ -198,6 +204,9 @@ async fn main() {
         account_equity: Mutex::new(equity),
         strategy_engine_url,
         symbols: Mutex::new(symbols),
+        spy_day_open: Mutex::new(None),
+        spy_day_change_pct: Mutex::new(0.0),
+        profit_target_hit: Mutex::new(false),
     });
 
     // 7. Spawn WebSocket bar ingestion task
@@ -249,6 +258,8 @@ async fn main() {
         .route("/orders", get(get_orders))
         .route("/trading/halt", post(halt_trading))
         .route("/trading/resume", post(resume_trading))
+        .route("/flatten", post(flatten_day_positions))
+        .route("/positions/:symbol/close", post(close_position))
         .route("/risk/config", get(get_risk_config).patch(patch_risk_config))
         .route("/risk/swing-config", get(get_swing_risk_config).patch(patch_swing_risk_config))
         .route("/positions/day", get(get_day_positions))
@@ -467,12 +478,18 @@ async fn process_bar(state: &Arc<AppState>, bar: &Bar) {
 
         // Build risk context
         let positions = state.positions.lock().await;
+        let (net_long, net_short) = positions.net_exposure();
         let ctx = RiskContext {
             trading_halted: *state.trading_halted.lock().await,
             account_equity: *state.account_equity.lock().await,
             daily_loss: *state.daily_pnl.lock().await,
             open_position_count: positions.count(),
             position_value_for_symbol: positions.position_value(&signal.symbol, bar.close),
+            spy_day_change_pct: *state.spy_day_change_pct.lock().await,
+            net_long_exposure: net_long,
+            net_short_exposure: net_short,
+            strategy_position_count: positions.count_by_strategy(&signal.strategy_name),
+            profit_target_hit: *state.profit_target_hit.lock().await,
         };
         drop(positions);
 
@@ -489,9 +506,13 @@ async fn process_bar(state: &Arc<AppState>, bar: &Bar) {
                     Direction::Hold => continue,
                 };
 
-                // Calculate qty: use max_position_size_pct of equity
+                // Calculate qty: use configured max_position_size_pct of equity
                 let equity = *state.account_equity.lock().await;
-                let max_value = equity * 0.10; // 10% of equity
+                let position_size_pct = {
+                    let engine = state.risk_engine.lock().await;
+                    engine.config.max_position_size_pct
+                };
+                let max_value = equity * position_size_pct;
                 let qty = (max_value / bar.close).floor().max(1.0);
 
                 match state.alpaca.submit_market_order(&signal.symbol, qty, side).await {
@@ -527,10 +548,14 @@ async fn process_bar(state: &Arc<AppState>, bar: &Bar) {
                         // Poll for fill (market orders usually fill quickly)
                         let fill_price = poll_for_fill(state, &alpaca_order.id, &order.order_id, side, qty, &signal.symbol).await;
 
-                        // Update position tracker
+                        // Update position tracker with day stop/take levels and strategy name
                         if let Some(fp) = fill_price {
+                            let (stop_loss, take_profit) = {
+                                let engine = state.risk_engine.lock().await;
+                                engine.day_stop_take(fp, &signal.direction)
+                            };
                             let mut positions = state.positions.lock().await;
-                            let pos = positions.update_on_fill(&signal.symbol, side, qty, fp, signal.trade_type.clone(), None, None);
+                            let pos = positions.update_on_fill_with_strategy(&signal.symbol, side, qty, fp, signal.trade_type.clone(), Some(stop_loss), Some(take_profit), &signal.strategy_name);
                             if let Ok(con) = db::connect() {
                                 match pos {
                                     Some(ref p) => { let _ = db::upsert_position(&con, p); }
@@ -692,6 +717,196 @@ async fn get_orders(
     Json(orders)
 }
 
+// --- Manual position management ---
+
+/// POST /flatten — close all day-trading positions immediately.
+async fn flatten_day_positions(
+    State(state): State<Arc<AppState>>,
+) -> Json<serde_json::Value> {
+    let positions = {
+        let tracker = state.positions.lock().await;
+        tracker.day_positions()
+    };
+
+    if positions.is_empty() {
+        return Json(serde_json::json!({"status": "ok", "closed": 0, "message": "No day positions to flatten"}));
+    }
+
+    info!(count = positions.len(), "Manual flatten triggered");
+
+    let mut closed = 0u32;
+    let mut failed = Vec::new();
+
+    for pos in &positions {
+        let close_side = match pos.side {
+            PositionSide::Long => "sell",
+            PositionSide::Short => "buy",
+        };
+
+        match state.alpaca.submit_market_order(&pos.symbol, pos.qty, close_side).await {
+            Ok(alpaca_order) => {
+                let now = chrono::Utc::now().to_rfc3339();
+                let order = Order {
+                    order_id: uuid::Uuid::new_v4().to_string(),
+                    alpaca_id: Some(alpaca_order.id.clone()),
+                    symbol: pos.symbol.clone(),
+                    side: close_side.to_string(),
+                    qty: pos.qty,
+                    filled_price: alpaca_order.filled_avg_price.as_ref().and_then(|p| p.parse::<f64>().ok()),
+                    status: alpaca_order.status.clone(),
+                    strategy_name: "MANUAL_FLATTEN".to_string(),
+                    created_at: now,
+                    filled_at: alpaca_order.filled_at.clone(),
+                    trade_type: models::TradeType::Day,
+                };
+
+                if let Ok(con) = db::connect() {
+                    let _ = db::insert_order(&con, &order);
+                }
+                state.risk_engine.lock().await.record_order(&pos.symbol);
+
+                let fill_price = poll_for_fill(
+                    &state, &alpaca_order.id, &order.order_id, close_side, pos.qty, &pos.symbol,
+                ).await;
+
+                {
+                    let mut tracker = state.positions.lock().await;
+                    let updated = tracker.update_on_fill(
+                        &pos.symbol, close_side, pos.qty, fill_price.unwrap_or(0.0),
+                        models::TradeType::Day, None, None,
+                    );
+                    if let Ok(con) = db::connect() {
+                        match updated {
+                            Some(ref p) => { let _ = db::upsert_position(&con, p); }
+                            None => { let _ = db::delete_position(&con, &pos.symbol); }
+                        }
+                    }
+                }
+
+                state.broadcaster.send(SseEvent {
+                    event_type: SseEventType::PositionUpdate,
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    payload: serde_json::json!({
+                        "symbol": pos.symbol,
+                        "action": "MANUAL_FLATTEN",
+                        "qty_sold": pos.qty,
+                        "fill_price": fill_price,
+                    }),
+                });
+
+                info!(symbol = %pos.symbol, fill_price, "Manually flattened");
+                closed += 1;
+            }
+            Err(e) => {
+                error!(symbol = %pos.symbol, "Manual flatten failed: {e}");
+                failed.push(pos.symbol.clone());
+            }
+        }
+    }
+
+    info!(closed, failed = ?failed, "Manual flatten complete");
+    Json(serde_json::json!({
+        "status": if failed.is_empty() { "ok" } else { "partial" },
+        "closed": closed,
+        "failed": failed,
+    }))
+}
+
+/// POST /positions/:symbol/close — close a single position.
+async fn close_position(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(symbol): axum::extract::Path<String>,
+) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, Json<serde_json::Value>)> {
+    let symbol = symbol.to_uppercase();
+
+    let pos = {
+        let tracker = state.positions.lock().await;
+        tracker.get(&symbol).cloned()
+    };
+
+    let pos = match pos {
+        Some(p) => p,
+        None => return Err((
+            axum::http::StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": format!("No open position for {symbol}")})),
+        )),
+    };
+
+    let close_side = match pos.side {
+        PositionSide::Long => "sell",
+        PositionSide::Short => "buy",
+    };
+
+    info!(symbol = %symbol, qty = pos.qty, side = close_side, "Manual position close");
+
+    match state.alpaca.submit_market_order(&symbol, pos.qty, close_side).await {
+        Ok(alpaca_order) => {
+            let now = chrono::Utc::now().to_rfc3339();
+            let order = Order {
+                order_id: uuid::Uuid::new_v4().to_string(),
+                alpaca_id: Some(alpaca_order.id.clone()),
+                symbol: symbol.clone(),
+                side: close_side.to_string(),
+                qty: pos.qty,
+                filled_price: alpaca_order.filled_avg_price.as_ref().and_then(|p| p.parse::<f64>().ok()),
+                status: alpaca_order.status.clone(),
+                strategy_name: "MANUAL_CLOSE".to_string(),
+                created_at: now,
+                filled_at: alpaca_order.filled_at.clone(),
+                trade_type: pos.trade_type.clone(),
+            };
+
+            if let Ok(con) = db::connect() {
+                let _ = db::insert_order(&con, &order);
+            }
+            state.risk_engine.lock().await.record_order(&symbol);
+
+            let fill_price = poll_for_fill(
+                &state, &alpaca_order.id, &order.order_id, close_side, pos.qty, &symbol,
+            ).await;
+
+            {
+                let mut tracker = state.positions.lock().await;
+                let updated = tracker.update_on_fill(
+                    &symbol, close_side, pos.qty, fill_price.unwrap_or(0.0),
+                    pos.trade_type.clone(), None, None,
+                );
+                if let Ok(con) = db::connect() {
+                    match updated {
+                        Some(ref p) => { let _ = db::upsert_position(&con, p); }
+                        None => { let _ = db::delete_position(&con, &symbol); }
+                    }
+                }
+            }
+
+            state.broadcaster.send(SseEvent {
+                event_type: SseEventType::PositionUpdate,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                payload: serde_json::json!({
+                    "symbol": symbol,
+                    "action": "MANUAL_CLOSE",
+                    "qty_sold": pos.qty,
+                    "fill_price": fill_price,
+                }),
+            });
+
+            info!(symbol = %symbol, fill_price, "Position manually closed");
+            Ok(Json(serde_json::json!({
+                "status": "ok",
+                "symbol": symbol,
+                "fill_price": fill_price,
+            })))
+        }
+        Err(e) => {
+            error!(symbol = %symbol, "Manual close failed: {e}");
+            Err((
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("Order submission failed: {e}")})),
+            ))
+        }
+    }
+}
+
 // --- DB proxy endpoints (strategy engine writes through these) ---
 
 #[derive(Debug, Deserialize)]
@@ -828,6 +1043,16 @@ async fn get_risk_config(
         min_signal_confidence: engine.config.min_signal_confidence,
         order_throttle_secs: engine.config.order_throttle_secs,
         eod_flatten_time_et: "15:45".to_string(),
+        day_stop_loss_pct: engine.config.day_stop_loss_pct,
+        day_take_profit_pct: engine.config.day_take_profit_pct,
+        regime_filter_enabled: engine.config.regime_filter_enabled,
+        regime_filter_threshold_pct: engine.config.regime_filter_threshold_pct,
+        max_net_exposure_pct: engine.config.max_net_exposure_pct,
+        max_positions_per_strategy: engine.config.max_positions_per_strategy,
+        daily_loss_tier1_pct: engine.config.daily_loss_tier1_pct,
+        daily_loss_tier2_pct: engine.config.daily_loss_tier2_pct,
+        daily_profit_target_pct: engine.config.daily_profit_target_pct,
+        regime_boosted_exposure_pct: engine.config.regime_boosted_exposure_pct,
     })
 }
 
@@ -850,6 +1075,14 @@ async fn patch_risk_config(
         ("max_daily_loss_pct", update.max_daily_loss_pct),
         ("max_position_size_pct", update.max_position_size_pct),
         ("min_signal_confidence", update.min_signal_confidence),
+        ("day_stop_loss_pct", update.day_stop_loss_pct),
+        ("day_take_profit_pct", update.day_take_profit_pct),
+        ("regime_filter_threshold_pct", update.regime_filter_threshold_pct),
+        ("max_net_exposure_pct", update.max_net_exposure_pct),
+        ("daily_loss_tier1_pct", update.daily_loss_tier1_pct),
+        ("daily_loss_tier2_pct", update.daily_loss_tier2_pct),
+        ("daily_profit_target_pct", update.daily_profit_target_pct),
+        ("regime_boosted_exposure_pct", update.regime_boosted_exposure_pct),
     ] {
         if let Some(v) = val {
             if v < 0.0 || v > 1.0 {
@@ -893,6 +1126,36 @@ async fn patch_risk_config(
         if let Some(v) = update.order_throttle_secs {
             engine.config.order_throttle_secs = v;
         }
+        if let Some(v) = update.day_stop_loss_pct {
+            engine.config.day_stop_loss_pct = v;
+        }
+        if let Some(v) = update.day_take_profit_pct {
+            engine.config.day_take_profit_pct = v;
+        }
+        if let Some(v) = update.regime_filter_enabled {
+            engine.config.regime_filter_enabled = v;
+        }
+        if let Some(v) = update.regime_filter_threshold_pct {
+            engine.config.regime_filter_threshold_pct = v;
+        }
+        if let Some(v) = update.max_net_exposure_pct {
+            engine.config.max_net_exposure_pct = v;
+        }
+        if let Some(v) = update.max_positions_per_strategy {
+            engine.config.max_positions_per_strategy = v;
+        }
+        if let Some(v) = update.daily_loss_tier1_pct {
+            engine.config.daily_loss_tier1_pct = v;
+        }
+        if let Some(v) = update.daily_loss_tier2_pct {
+            engine.config.daily_loss_tier2_pct = v;
+        }
+        if let Some(v) = update.daily_profit_target_pct {
+            engine.config.daily_profit_target_pct = v;
+        }
+        if let Some(v) = update.regime_boosted_exposure_pct {
+            engine.config.regime_boosted_exposure_pct = v;
+        }
 
         RiskConfigResponse {
             max_daily_loss_pct: engine.config.max_daily_loss_pct,
@@ -901,6 +1164,16 @@ async fn patch_risk_config(
             min_signal_confidence: engine.config.min_signal_confidence,
             order_throttle_secs: engine.config.order_throttle_secs,
             eod_flatten_time_et: "15:45".to_string(),
+            day_stop_loss_pct: engine.config.day_stop_loss_pct,
+            day_take_profit_pct: engine.config.day_take_profit_pct,
+            regime_filter_enabled: engine.config.regime_filter_enabled,
+            regime_filter_threshold_pct: engine.config.regime_filter_threshold_pct,
+            max_net_exposure_pct: engine.config.max_net_exposure_pct,
+            max_positions_per_strategy: engine.config.max_positions_per_strategy,
+            daily_loss_tier1_pct: engine.config.daily_loss_tier1_pct,
+            daily_loss_tier2_pct: engine.config.daily_loss_tier2_pct,
+            daily_profit_target_pct: engine.config.daily_profit_target_pct,
+            regime_boosted_exposure_pct: engine.config.regime_boosted_exposure_pct,
         }
     };
 
@@ -910,6 +1183,12 @@ async fn patch_risk_config(
         max_open_positions = response.max_open_positions,
         min_signal_confidence = response.min_signal_confidence,
         order_throttle_secs = response.order_throttle_secs,
+        day_stop_loss_pct = response.day_stop_loss_pct,
+        day_take_profit_pct = response.day_take_profit_pct,
+        regime_filter_enabled = response.regime_filter_enabled,
+        regime_filter_threshold_pct = response.regime_filter_threshold_pct,
+        max_net_exposure_pct = response.max_net_exposure_pct,
+        max_positions_per_strategy = response.max_positions_per_strategy,
         "Risk config updated"
     );
 
@@ -924,6 +1203,16 @@ async fn patch_risk_config(
             "min_signal_confidence": response.min_signal_confidence,
             "order_throttle_secs": response.order_throttle_secs,
             "eod_flatten_time_et": "15:45",
+            "day_stop_loss_pct": response.day_stop_loss_pct,
+            "day_take_profit_pct": response.day_take_profit_pct,
+            "regime_filter_enabled": response.regime_filter_enabled,
+            "regime_filter_threshold_pct": response.regime_filter_threshold_pct,
+            "max_net_exposure_pct": response.max_net_exposure_pct,
+            "max_positions_per_strategy": response.max_positions_per_strategy,
+            "daily_loss_tier1_pct": response.daily_loss_tier1_pct,
+            "daily_loss_tier2_pct": response.daily_loss_tier2_pct,
+            "daily_profit_target_pct": response.daily_profit_target_pct,
+            "regime_boosted_exposure_pct": response.regime_boosted_exposure_pct,
         }),
     });
 
@@ -1056,6 +1345,9 @@ mod risk_config_tests {
             account_equity: Mutex::new(100_000.0),
             strategy_engine_url: "http://localhost:9100".into(),
             symbols: Mutex::new(vec!["SPY".into(), "QQQ".into(), "AAPL".into(), "MSFT".into(), "NVDA".into(), "GOOGL".into()]),
+            spy_day_open: Mutex::new(None),
+            spy_day_change_pct: Mutex::new(0.0),
+            profit_target_hit: Mutex::new(false),
         })
     }
 

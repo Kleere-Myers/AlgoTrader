@@ -66,7 +66,7 @@ impl Default for RiskConfig {
             max_positions_per_strategy: 2,
             daily_loss_tier1_pct: 0.02,
             daily_loss_tier2_pct: 0.03,
-            daily_profit_target_pct: 0.0,
+            daily_profit_target_pct: 0.03,
             regime_boosted_exposure_pct: 0.70,
         }
     }

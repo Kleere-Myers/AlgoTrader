@@ -10,9 +10,9 @@ from strategies.sentiment import score_articles
 class NewsSentimentStrategy(BaseStrategy):
     def __init__(
         self,
-        min_articles: int = 3,
-        bullish_threshold: float = 0.3,
-        bearish_threshold: float = -0.3,
+        min_articles: int = 5,
+        bullish_threshold: float = 0.5,
+        bearish_threshold: float = -0.5,
     ):
         self.min_articles = min_articles
         self.bullish_threshold = bullish_threshold

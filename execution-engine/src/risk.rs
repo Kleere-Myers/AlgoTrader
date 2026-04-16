@@ -45,7 +45,7 @@ impl Default for SwingRiskConfig {
             max_portfolio_heat_pct: 0.06,
             per_position_stop_loss_pct: 0.05,
             per_position_take_profit_pct: 0.15,
-            min_composite_confidence: 0.65,
+            min_composite_confidence: 0.60,
         }
     }
 }

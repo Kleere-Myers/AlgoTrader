@@ -51,7 +51,7 @@ Services communicate via REST APIs, WebSocket (market data), and SSE (live posit
 | MultiTimeframeTrend | Technical | Weekly EMA trend + daily RSI pullback entries |
 | RelativeStrength | Technical | RS ranking vs SPY benchmark |
 
-A **CompositeScorer** aggregates weighted signals from multiple strategies into a single conviction score for swing trade entries.
+A **CompositeScorer** aggregates weighted signals from multiple strategies into a single conviction score for swing trade entries. Composite confidence is scaled to the full 0-1 range so signals can pass the execution engine's minimum confidence gate.
 
 ## Risk Management
 
@@ -65,6 +65,7 @@ Risk enforcement is implemented in Rust (`execution-engine/src/risk.rs`) and run
 - **Per-position size constraints** and **per-strategy position limits**
 - **Per-position stop-loss and take-profit** for both day and swing trades
 - **Trade frequency throttling** per symbol
+- **Order reconciliation** — background loop checks pending orders against Alpaca every 30 seconds, resolving stuck orders
 - **Automatic EOD position flattening** at 3:45 PM ET (day trades only; swing positions exempt)
 - **Manual position management** — flatten all day positions or close individual positions via API/dashboard
 

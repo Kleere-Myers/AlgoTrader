@@ -70,9 +70,9 @@ class TestBaseStrategyContract:
 
     def test_default_params(self, strategy):
         assert strategy.params() == {
-            "min_articles": 3,
-            "bullish_threshold": 0.3,
-            "bearish_threshold": -0.3,
+            "min_articles": 5,
+            "bullish_threshold": 0.5,
+            "bearish_threshold": -0.5,
         }
 
     def test_custom_params(self, custom_strategy):
@@ -201,9 +201,10 @@ class TestGenerateSignal:
     @patch("strategies.strategy_news_sentiment.score_articles")
     @patch("strategies.strategy_news_sentiment.fetch_news")
     def test_confidence_capped_at_one(self, mock_fetch, mock_score, strategy):
-        mock_fetch.return_value = [{"headline": f"h{i}"} for i in range(3)]
+        mock_fetch.return_value = [{"headline": f"h{i}"} for i in range(5)]
         mock_score.return_value = _make_articles([
             ("positive", 0.99), ("positive", 0.98), ("positive", 0.97),
+            ("positive", 0.96), ("positive", 0.95),
         ])
 
         bars = _make_bars()

@@ -122,6 +122,7 @@ Regular session only: 9:30 AM — 4:00 PM ET
 Day positions auto-closed by 3:45 PM ET (swing positions are exempt)
 Position prices refresh every 15s during extended hours (4 AM – 8 PM ET)
 Position quantities sync with Alpaca every ~5 minutes + on startup
+Pending orders reconciled with Alpaca every 30 seconds (order_reconciliation_loop)
 
 ---
 
@@ -169,7 +170,7 @@ Until that phrase is used, treat all agent files as reference documentation only
 | MLSignalGenerator | ML | `strategy_ml_signal.py` |
 | VWAPStrategy | Technical | `strategy_vwap.py` |
 | OpeningRangeBreakout | Technical | `strategy_orb.py` |
-| NewsSentimentStrategy | NLP/FinBERT | `strategy_news_sentiment.py` |
+| NewsSentimentStrategy | NLP/FinBERT | `strategy_news_sentiment.py` (thresholds: 0.5/-0.5, min 5 articles) |
 
 ### Swing Trading Strategies
 | Strategy | Type | File |
@@ -177,10 +178,12 @@ Until that phrase is used, treat all agent files as reference documentation only
 | MultiTimeframeTrend | Weekly EMA + Daily RSI pullback | `strategy_multi_timeframe.py` |
 | RelativeStrength | RS ranking vs SPY benchmark | `strategy_relative_strength.py` |
 
-Swing signals are generated via `POST /signal/swing` using daily bars. A `CompositeScorer`
-(`strategies/composite_scorer.py`) aggregates weighted signals from swing + compatible day
-strategies into a single conviction score. Positions with `trade_type="swing"` are exempt
-from EOD auto-flatten.
+Swing signals are generated via `POST /signal/swing` using daily bars at 4:05 PM ET.
+A `CompositeScorer` (`strategies/composite_scorer.py`) aggregates weighted signals from
+swing + compatible day strategies into a single conviction score. The composite confidence
+is scaled from the raw weighted sum (`[threshold, 1.0]` → `[0.5, 1.0]`) so it can pass
+the execution engine's `min_composite_confidence` gate (0.60). Positions with
+`trade_type="swing"` are exempt from EOD auto-flatten.
 
 Shared utilities for the news strategy:
 - `strategies/news_fetcher.py` — Alpaca News API (with thumbnail extraction) + yfinance fallback, 5-min TTL cache
@@ -268,6 +271,9 @@ Symbols link to `/quote/[symbol]`.
   MovingAverageCrossover, 14 for RSI, 6 for VWAP/ORB).
 - Positions opened manually in Alpaca are synced with `trade_type=day` by default
   since Alpaca doesn't track trade type. Set trade type manually if needed.
+- Alpaca-synced positions can exceed `max_open_positions` — the risk engine only
+  gates new signal-driven orders, not positions synced from Alpaca. A warning is
+  logged when synced count exceeds the limit.
 
 ## Skills (Slash Commands)
 - `/dev <start|stop|restart|status> [service]` — manage dev services

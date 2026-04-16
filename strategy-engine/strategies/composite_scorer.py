@@ -98,11 +98,22 @@ class CompositeScorer:
         else:
             direction = "HOLD"
 
-        confidence = min(abs(composite), 1.0)
+        # Scale confidence to use the full 0–1 range. The raw composite is a
+        # weighted average that structurally tops out around 0.6, so using it
+        # directly as confidence makes it impossible to pass the execution
+        # engine's min_composite_confidence gate. Instead, map the range
+        # [threshold, 1.0] → [0.5, 1.0] so that a signal at the threshold
+        # starts at 0.5 and stronger agreement pushes toward 1.0.
+        raw = abs(composite)
+        if raw > self.threshold:
+            confidence = min(0.5 + 0.5 * (raw - self.threshold) / (1.0 - self.threshold), 1.0)
+        else:
+            confidence = min(raw / self.threshold * 0.5, 0.5) if self.threshold > 0 else raw
+
         bypass_note = ""
         if bypass_signal is not None and abs(composite) <= self.threshold:
             bypass_note = f" | BYPASS: {bypass_signal.strategy_name}={bypass_signal.direction}({bypass_signal.confidence:.2f})>={self.high_confidence_bypass}"
-            confidence = max(confidence, bypass_signal.confidence * self.weights.get(bypass_signal.strategy_name, 0.25))
+            confidence = max(confidence, bypass_signal.confidence)
 
         reason = f"Composite={composite:+.3f} [{', '.join(contributing) or 'no contributing signals'}]{bypass_note}"
 

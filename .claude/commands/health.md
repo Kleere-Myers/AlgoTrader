@@ -21,7 +21,13 @@ Report PID for running services, "DOWN" for stopped ones.
 - `GET /symbols` — show count and list
 - `GET /strategies` — count total and enabled strategies
 
-### 3. Recent Errors
+### 3. Pending Orders
+Query the SQLite database for orders stuck at `pending_new`/`new`/`accepted`/`pending` status.
+Use DuckDB MCP (`mcp__duckdb__query` with `sqlite_scan()`) or direct sqlite3 CLI.
+Show count and age of oldest pending order. Note: the order reconciliation loop should clear these
+within 30 seconds — if any are older than 2 minutes, flag as a potential issue.
+
+### 4. Recent Errors
 Scan the last 50 lines of each log file for ERROR or WARN entries:
 - `/tmp/execution-engine.log`
 - `/tmp/strategy-engine.log`
@@ -56,6 +62,9 @@ Strategies:
 
 Symbols:
   X tracked: SYM1, SYM2, ...
+
+Pending Orders:
+  X orders stuck (oldest: Xm ago)  [or "None" if clean]
 
 Recent Errors (last 1h):
   Execution: X errors, Y warnings

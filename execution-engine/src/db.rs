@@ -139,6 +139,21 @@ pub fn insert_order(con: &Connection, order: &Order) -> Result<(), rusqlite::Err
     Ok(())
 }
 
+/// Fetch orders that are still pending (not filled/canceled/expired/rejected).
+/// Used by the reconciliation loop to check stale orders against Alpaca.
+pub fn get_pending_orders(con: &Connection) -> Result<Vec<(String, String)>, rusqlite::Error> {
+    let mut stmt = con.prepare(
+        "SELECT order_id, alpaca_id FROM orders \
+         WHERE status IN ('pending_new', 'new', 'accepted', 'pending') \
+         AND alpaca_id IS NOT NULL \
+         AND created_at >= datetime('now', '-1 day')",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    rows.collect()
+}
+
 /// Update an order's status, fill price, and fill time.
 pub fn update_order_fill(
     con: &Connection,

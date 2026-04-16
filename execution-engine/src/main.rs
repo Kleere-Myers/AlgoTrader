@@ -245,6 +245,12 @@ async fn main() {
         scheduler::symbol_sync_loop(sym_state).await;
     });
 
+    // 8f. Spawn order reconciliation loop (checks pending orders every 30s)
+    let recon_state = state.clone();
+    tokio::spawn(async move {
+        scheduler::order_reconciliation_loop(recon_state).await;
+    });
+
     // 9. Build Axum router
     let cors = CorsLayer::new()
         .allow_origin("http://localhost:9102".parse::<axum::http::HeaderValue>().unwrap())

@@ -704,6 +704,19 @@ pub async fn quote_refresh_loop(state: Arc<AppState>) {
                 Ok(alpaca_positions) => {
                     let mut tracker = state.positions.lock().await;
                     let changed = tracker.sync_with_alpaca(&alpaca_positions);
+                    // Warn if synced position count exceeds max_open_positions
+                    let pos_count = tracker.count();
+                    let max_positions = state.risk_engine.lock().await.config.max_open_positions;
+                    if pos_count > max_positions {
+                        warn!(
+                            current = pos_count,
+                            max = max_positions,
+                            "Alpaca position count ({}) exceeds max_open_positions ({}). \
+                             New signal-driven orders will be blocked until positions close.",
+                            pos_count, max_positions,
+                        );
+                    }
+
                     if !changed.is_empty() {
                         info!(changed = ?changed, "Position sync: updated from Alpaca");
                         if let Ok(con) = db::connect() {
@@ -1060,6 +1073,81 @@ pub async fn symbol_sync_loop(state: Arc<AppState>) {
                     "Symbol list updated from strategy engine"
                 );
                 *current = new_syms;
+            }
+        }
+    }
+}
+
+/// Background task: every 30 seconds, reconcile pending orders with Alpaca.
+/// Orders that get stuck at pending_new after the 5-second poll timeout are
+/// checked here and updated to their actual status (filled/canceled/expired).
+pub async fn order_reconciliation_loop(state: Arc<AppState>) {
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+
+        let pending = match db::connect() {
+            Ok(con) => match db::get_pending_orders(&con) {
+                Ok(orders) => orders,
+                Err(e) => {
+                    warn!("Failed to query pending orders: {e}");
+                    continue;
+                }
+            },
+            Err(e) => {
+                warn!("DB connect failed in order reconciliation: {e}");
+                continue;
+            }
+        };
+
+        if pending.is_empty() {
+            continue;
+        }
+
+        info!(count = pending.len(), "Reconciling pending orders with Alpaca");
+
+        for (order_id, alpaca_id) in &pending {
+            match state.alpaca.get_order(alpaca_id).await {
+                Ok(order) => {
+                    let terminal = matches!(
+                        order.status.as_str(),
+                        "filled" | "canceled" | "expired" | "rejected"
+                    );
+                    if !terminal {
+                        continue;
+                    }
+
+                    let fill_price = order
+                        .filled_avg_price
+                        .as_ref()
+                        .and_then(|p| p.parse::<f64>().ok());
+
+                    if let Ok(con) = db::connect() {
+                        let _ = db::update_order_fill(
+                            &con,
+                            order_id,
+                            &order.status,
+                            fill_price,
+                            order.filled_at.as_deref(),
+                        );
+                    }
+
+                    if order.status == "filled" {
+                        info!(
+                            symbol = %order.symbol,
+                            fill_price,
+                            "Reconciled stale order as filled"
+                        );
+                    } else {
+                        info!(
+                            symbol = %order.symbol,
+                            status = %order.status,
+                            "Reconciled stale order as {}", order.status
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!(alpaca_id, "Failed to check order status: {e}");
+                }
             }
         }
     }
